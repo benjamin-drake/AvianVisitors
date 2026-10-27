@@ -1,0 +1,7 @@
+# Your own art stays off GitHub (the fork is public). ops/push-art.sh copies it to the Pis.
+sheets/
+art/
+out/
+detections.jsonl
+.venv/
+__pycache__/

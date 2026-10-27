@@ -1,0 +1,8 @@
+{
+  "place": "Melton Mowbray (LE14)",
+  "latitude": 52.77,
+  "longitude": -0.89,
+  "linger_minutes": 60,
+  "art_dir": "art",
+  "ebird_regions": ["GB-ENG-LEC", "GB-ENG-RUT"]
+}
