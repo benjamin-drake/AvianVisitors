@@ -32,6 +32,15 @@ DEFAULT_LABELS = [
 ]
 
 
+# eBird has moved these to new genera since BirdNET's labels were made, and the
+# English names differ too, so neither match catches them.
+RENAMED = {
+    "Astur gentilis": "Accipiter gentilis",       # Goshawk
+    "Ardea ibis": "Bubulcus ibis",                # Cattle Egret
+    "Cecropis rufula": "Cecropis daurica",        # Red-rumped Swallow
+}
+
+
 def ebird(path: str, key: str):
     req = urllib.request.Request(f"https://api.ebird.org/v2/{path}", headers={"X-eBirdApiToken": key})
     with urllib.request.urlopen(req, timeout=60) as r:
@@ -82,7 +91,7 @@ def main() -> None:
             continue
         sci, com = t["sciName"], t["comName"]
         known = reg.get(sci)
-        candidates = [sci, *(known.aliases if known else ())]
+        candidates = [sci, RENAMED.get(sci, sci), *(known.aliases if known else ())]
         hit = next((c for c in candidates if c in labels), None) or by_common.get(com.lower())
         if hit:
             chosen[hit] = labels[hit]
