@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Frame Pi (Raspberry Pi Zero 2 W + Waveshare 9.7" e-Paper HAT+ (E)) setup:
+# Frame Pi (Raspberry Pi Zero W / Zero 2 W + Waveshare 9.7" e-Paper HAT+ (E)) setup:
 #
 #   ~/garden/garden/frame/install.sh [--station http://birdnet.local]
 #
-# Safe to re-run. Enables SPI, installs the Python bits from apt (no compiling
-# on a Zero), keeps SD writes low, and adds a timer that runs frame.py every
-# 15 minutes. A reboot is needed the first time, to bring SPI up.
+# Works on 32-bit (Zero W) and 64-bit Raspberry Pi OS. Safe to re-run. Enables
+# SPI, installs the Python bits from apt (no compiling on a Zero), keeps SD
+# writes low, and adds a timer that runs frame.py every 15 minutes. A reboot
+# is needed the first time, to bring SPI up.
 set -euo pipefail
 
 GARDEN=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -24,6 +25,7 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 [ "$EUID" -ne 0 ] || die "run as your normal user, not root"
 
 say "1/5 Packages"
+echo "  $(tr -d '\0' < /proc/device-tree/model 2>/dev/null), $(getconf LONG_BIT)-bit OS"
 sudo apt-get update -qq
 sudo apt-get install -y python3-venv python3-numpy python3-pil python3-spidev \
   python3-gpiozero python3-lgpio >/dev/null

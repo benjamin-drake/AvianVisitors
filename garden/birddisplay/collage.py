@@ -16,7 +16,7 @@ doesn't touch any placed silhouette (plus a padding moat). If anything won't
 fit, everything shrinks 7% and repacks. Differences from upstream: five poses
 chosen at random (upstream: perched, 15% flight), random mirroring, a size
 wobble, a per-species size factor and a cap on the biggest bird, and the collision test uses an FFT
-correlation of the whole occupancy grid so a Pi Zero 2 W can afford it.
+correlation of the whole occupancy grid so a Pi Zero W can afford it.
 """
 from __future__ import annotations
 

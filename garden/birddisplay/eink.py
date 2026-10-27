@@ -8,6 +8,7 @@ and has an unused code 4 that is also black.
 """
 from __future__ import annotations
 
+import numpy as np
 from PIL import Image, ImageEnhance
 
 WIDTH, HEIGHT = 1120, 784
@@ -76,8 +77,9 @@ def panel_buffer(indexed: Image.Image) -> bytes:
     if indexed.size != (WIDTH, HEIGHT):
         raise ValueError(f"expected {WIDTH}x{HEIGHT}, got {indexed.size}")
     codes = indexed.point(list(PANEL_CODE) + [0] * (256 - len(PANEL_CODE))).tobytes()
-    hi, lo = codes[0::2], codes[1::2]
-    return bytes((h << 4) | l for h, l in zip(hi, lo))
+    # numpy, not a Python loop over 439,040 pairs: that loop takes seconds on a Pi Zero W.
+    px = np.frombuffer(codes, dtype=np.uint8)
+    return ((px[0::2] << 4) | px[1::2]).tobytes()
 
 
 def true_size(img: Image.Image, points_per_inch: float = 127, backing_scale: int = 2) -> Image.Image:

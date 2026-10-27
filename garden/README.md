@@ -1,12 +1,12 @@
 # Garden birds
 
 An e-ink bird frame built on AvianVisitors. A Raspberry Pi 3B runs BirdNET-Pi with a
-microphone outside. A Pi Zero 2 W drives a Waveshare 9.7" e-Paper HAT+ (E)
+microphone outside. A Pi Zero W (or Zero 2 W) drives a Waveshare 9.7" e-Paper HAT+ (E)
 (Spectra 6, 1120x784) showing the birds heard in the last hour, drawn from your own
 illustrations.
 
 ```
- mic outside ── Pi 3B "birdnet"                      Pi Zero 2 W "birdframe"
+ mic outside ── Pi 3B "birdnet"                      Pi Zero W "birdframe"
                  stock AvianVisitors/BirdNET-Pi  <──── every 15 min: who was heard in the
                  + garden/ (this folder):        HTTP   last 60 min? Redraw only if that
                    00:10 archive, hourly log,           changed (or day/night flipped)
@@ -52,8 +52,13 @@ Do all of this at home, on your own wifi. Then add your in-laws' wifi (step 4) b
 taking the Pis over.
 
 ### 1. Flash both SD cards
-Use Raspberry Pi Imager with **Raspberry Pi OS Lite (64-bit)**. In its settings:
-- Hostname: `birdnet` for the 3B, `birdframe` for the Zero 2 W.
+Use Raspberry Pi Imager with Raspberry Pi OS **Lite**:
+- **3B (mic): 64-bit.** BirdNET-Pi won't install on anything else.
+- **Zero W (frame): 32-bit.** The original Zero W can't run 64-bit, and the frame code
+  doesn't need it. (If you swap in a Zero 2 W or 3A+ later, either works.)
+
+In Imager's settings:
+- Hostname: `birdnet` for the 3B, `birdframe` for the Zero W.
 - Your username and password, with SSH turned on.
 - Your home wifi, and Wireless LAN country GB.
 
@@ -91,7 +96,13 @@ sudo reboot
 are in `mic/summary.py`: email, ntfy, Telegram or SMS. Test it with
 `~/garden/garden/.venv/bin/python ~/garden/garden/mic/summary.py`.
 
-### 3. Frame Pi (Zero 2 W + panel)
+### 3. Frame Pi (Zero W + panel)
+
+The Zero W needs a 40-pin header to plug into the panel's HAT. If yours is a plain "W"
+rather than a "WH", solder on a 2x20 header (about £1) or fit a solderless hammer-in one
+(about £5, comes with a jig). On a Zero W expect a render to take a few seconds plus about
+30 s of panel refresh, run from a 15-minute timer. Check the first few runs with
+`journalctl -u garden-frame`.
 
 ```bash
 ssh you@birdframe.local
