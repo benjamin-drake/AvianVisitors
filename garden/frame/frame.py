@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from PIL import ImageDraw  # noqa: E402
 
 from birddisplay import eink, settings, sources  # noqa: E402
-from birddisplay.collage import Style, render_live  # noqa: E402
+from birddisplay.collage import render_live, style_for  # noqa: E402
 from birddisplay.sprites import SpriteLibrary  # noqa: E402
 from birddisplay.sun import is_night  # noqa: E402
 
@@ -118,7 +118,7 @@ def main() -> int:
 
     night = is_night(station_now, cfg["latitude"], cfg["longitude"])
     entries = [(r.sci, r.common, r.count) for r in recent]
-    image, tiles, sig = render_live(entries, station_now.date(), library, Style(), night)
+    image, tiles, sig = render_live(entries, station_now.date(), library, style_for(cfg), night)
     if stale:
         no_signal_mark(image)
         sig = "stale"

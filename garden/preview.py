@@ -25,7 +25,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 from birddisplay import eink, logbook
-from birddisplay.collage import Detection, Style, render_archive, render_screen
+from birddisplay.collage import Detection, render_archive, render_screen, style_for
 from birddisplay.sprites import SpriteLibrary
 from birddisplay.sun import is_night
 
@@ -83,7 +83,9 @@ def main() -> None:
     cfg = json.loads((ROOT / "config.json").read_text())
     library = SpriteLibrary(ROOT / cfg["art_dir"], stand_ins=args.stand_ins)
     linger = timedelta(minutes=cfg["linger_minutes"])
-    style = Style()
+    style = style_for(cfg)
+    archive_style = style_for({**cfg, "title": cfg.get("archive_title", "Birds of {date}").replace(
+        "{date}", f"{args.archive.day} {args.archive:%B}") if args.archive else ""})
     detections = load_detections(args.detections)
     prefix = "stress_" if args.stand_ins else ""
     night_at = (lambda t: args.mode == "night") if args.mode != "auto" else \
@@ -100,7 +102,7 @@ def main() -> None:
         return
 
     if args.archive:
-        frame = render_archive(detections, args.archive, library, style)
+        frame = render_archive(detections, args.archive, library, archive_style)
         stem = args.out / "archive" / f"{prefix}{args.archive}"
         save_all(frame.image, stem)
         print(f"{len(frame.tiles)} species -> {stem}_*.png")

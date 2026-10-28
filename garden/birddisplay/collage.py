@@ -91,16 +91,52 @@ class Style:
     margin: int = 18            # keep birds clear of the frame's edge/mat
     grid: int = 4               # px per occupancy cell (upstream GRID_STRIDE)
     pad: int = 3                # gap around each bird, in cells (upstream COLLAGE_PAD)
-    aspect_bias: float = 2.1    # wide ellipse for a landscape panel (upstream)
+    top: int = 0                # band reserved at the top (the title), px
+    ellipse: tuple[float, float] = (2.1, 1.0)  # spiral stretch (x, y): wide for landscape (upstream)
     count_exp: float = 0.35     # size ~ calls^0.35 (upstream 0.65 let a chatty tit outgrow a pheasant)
     size_exp: float = 2.0       # area ~ species size factor^2 (species.csv), so a pheasant reads bigger than a tit
     max_tile: float = 0.15      # no bird takes more than this share of the screen (few birds -> not huge)
-    size_wobble: tuple[float, float] = (0.8, 1.25)  # area multiplier per appearance
+    fill: float = 1.0           # scales upstream's area budget; >1 packs the birds larger
+    size_wobble: tuple[float, float] = (0.55, 1.7)  # area multiplier per appearance: big and small birds
     mirror: bool = True
     outline: int = 2            # night outline, px
     day_bg: tuple = (255, 255, 255)
     night_bg: tuple = (0, 0, 0)
     outline_colour: tuple = (255, 255, 255)
+    title: str = ""             # e.g. "Birds of the Hour"; drawn arched across the top
+    title_font: str = "Fraunces-Display.ttf"   # a file in garden/fonts/
+    title_size: int = 64
+    title_arch: float = 24      # degrees the title bows through; 0 = straight
+    title_top: int = 26         # gap above the title, px
+
+
+def content_box(style: Style) -> tuple[float, float, float, float]:
+    """Where birds may go: inside the margin and below the title."""
+    return (style.margin, style.margin + style.top,
+            style.width - style.margin, style.height - style.margin)
+
+
+def portrait(width: int = eink.HEIGHT, height: int = eink.WIDTH, **kw) -> Style:
+    """Style for the panel hung on its side (784 wide, 1120 tall): a taller spiral."""
+    kw = {"fill": 1.55, "max_tile": 0.2, **kw}
+    return with_title(Style(width=width, height=height, ellipse=(1.0, 1.5), **kw))
+
+
+def with_title(style: Style) -> Style:
+    """Reserve room at the top for the title (if there is one)."""
+    if style.title:
+        from .title import title_height
+        style.top = style.title_top + title_height(style.title_font, style.title_size, style.title,
+                                                   style.width, style.title_arch) + 6
+    return style
+
+
+def style_for(cfg: dict) -> Style:
+    """The Style a config asks for: orientation plus title settings."""
+    kw = {k: cfg[k] for k in ("title", "title_font", "title_size", "title_arch") if k in cfg}
+    if cfg.get("orientation", "landscape") == "portrait":
+        return portrait(**kw)
+    return with_title(Style(**kw))
 
 
 def tuning(n: int) -> dict:
@@ -143,11 +179,17 @@ def make_tiles(entries, library: SpriteLibrary, reg: Registry, rng: random.Rando
                style: Style) -> list[Tile]:
     """entries: (sci, common, count). Pose, mirroring and wobble come from rng."""
     tiles = []
+    # Deal poses like cards: shuffle all five, hand them out, reshuffle when the
+    # deck runs out. Seven birds then share at most two poses between them.
+    deck: list[int] = []
     for sci, common, count in entries:
         poses = library.poses(sci)
         if not poses:
             continue
-        pose = rng.randrange(len(poses))
+        if not deck:
+            deck = list(range(5))
+            rng.shuffle(deck)
+        pose = deck.pop() % len(poses)
         flip = style.mirror and rng.random() < 0.5
         size = reg.resolve(sci, common).size
         score = (max(1, count) ** style.count_exp * size ** style.size_exp
@@ -159,8 +201,9 @@ def make_tiles(entries, library: SpriteLibrary, reg: Registry, rng: random.Rando
 def size_tiles(tiles: list[Tile], style: Style) -> None:
     """Upstream steps 2-3: areas normalised to the budget, floored, then w/h from aspect."""
     t = tuning(len(tiles))
-    vp_area = (style.width - 2 * style.margin) * (style.height - 2 * style.margin)
-    budget, min_area = vp_area * t["budget"], vp_area * t["min_area"]
+    x0, y0, x1, y1 = content_box(style)
+    vp_area = (x1 - x0) * (y1 - y0)
+    budget, min_area = vp_area * t["budget"] * style.fill, vp_area * t["min_area"]
     total = sum(x.score for x in tiles) or 1
     max_area = vp_area * style.max_tile
     areas = [min(max_area, max(min_area, budget * x.score / total)) for x in tiles]
@@ -208,10 +251,9 @@ def mask_pack(tiles: list[Tile], style: Style, rng: random.Random,
     for x0, y0, x1, y1 in reserved:
         occ[y0 // cell:math.ceil(y1 / cell), x0 // cell:math.ceil(x1 / cell)] = True
 
-    lo_x, lo_y = style.margin, style.margin
-    hi_x, hi_y = style.width - style.margin, style.height - style.margin
-    cx, cy = style.width / 2, style.height / 2
-    xb, yb = style.aspect_bias, 1.0
+    lo_x, lo_y, hi_x, hi_y = content_box(style)
+    cx, cy = (lo_x + hi_x) / 2, (lo_y + hi_y) / 2
+    xb, yb = style.ellipse
     placed: list[Tile] = []
 
     for t in sorted(tiles, key=lambda t: -t.w * t.h):
@@ -281,12 +323,13 @@ def layout(entries, library: SpriteLibrary, style: Style, seed: str,
     if not reserved and placed:
         # Re-centre the cluster, as upstream does. Skipped when part of the
         # canvas is reserved, so the caption corner stays clear.
+        bx0, by0, bx1, by1 = content_box(style)
         left, right = min(t.x for t in placed), max(t.x + t.w for t in placed)
         top, bottom = min(t.y for t in placed), max(t.y + t.h for t in placed)
-        dx = style.width / 2 - (left + right) / 2
-        dy = style.height / 2 - (top + bottom) / 2
-        dx = max(style.margin - left, min(style.width - style.margin - right, dx))
-        dy = max(style.margin - top, min(style.height - style.margin - bottom, dy))
+        dx = (bx0 + bx1) / 2 - (left + right) / 2
+        dy = (by0 + by1) / 2 - (top + bottom) / 2
+        dx = max(bx0 - left, min(bx1 - right, dx))
+        dy = max(by0 - top, min(by1 - bottom, dy))
         for t in placed:
             t.x += dx
             t.y += dy
@@ -296,6 +339,11 @@ def layout(entries, library: SpriteLibrary, style: Style, seed: str,
 def render(tiles: list[Tile], style: Style, night: bool) -> Image.Image:
     bg = style.night_bg if night else style.day_bg
     canvas = Image.new("RGBA", (style.width, style.height), tuple(bg) + (255,))
+    if style.title:
+        from .title import draw_title
+        ink = style.outline_colour if night else (0, 0, 0)
+        draw_title(canvas, style.title, style.title_font, style.title_size, style.title_top,
+                   style.title_arch, ink)
     b = style.outline + 1
     for t in tiles:
         w, h = max(1, round(t.w)), max(1, round(t.h))
@@ -356,7 +404,8 @@ def render_archive(detections, day: date, library: SpriteLibrary, style: Style) 
         if d.time.date() == day:
             counts.setdefault(d.sci, [d.common, 0])[1] += 1
     entries = [(sci, c, n) for sci, (c, n) in counts.items() if library.drawable(sci)]
-    caption = f"{day:%A} {day.day} {day:%B %Y}  ·  {len(entries)} species"
+    # The title carries the date ("Birds of 28 October"); the corner gives the count.
+    caption = f"{day:%A}  ·  {len(entries)} species"
     box = _caption_box(caption, style)
     tiles = layout(entries, library, style, f"{day}|archive", reserved=[box])
     img = render(tiles, style, night=False)

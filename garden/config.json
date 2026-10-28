@@ -4,5 +4,14 @@
   "longitude": -0.89,
   "linger_minutes": 60,
   "art_dir": "art",
-  "ebird_regions": ["GB-ENG-LEC", "GB-ENG-RUT"]
+  "ebird_regions": [
+    "GB-ENG-LEC",
+    "GB-ENG-RUT"
+  ],
+  "orientation": "portrait",
+  "title": "Birds of the Hour",
+  "title_font": "Fraunces-Display.ttf",
+  "title_size": 66,
+  "title_arch": 24,
+  "archive_title": "Birds of {date}"
 }

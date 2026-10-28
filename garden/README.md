@@ -43,6 +43,17 @@ in flight, feeding. They can be transparent or on white.
 - **Edge trim.** `--trim 2` (the default) shaves the fringe off each bird's outline.
 - **Check the result** in `art/<species>/_check.png`.
 
+**Look of the frame** (`config.json`):
+- `orientation`: `portrait` (784x1120, as hung) or `landscape`.
+- `title`: "Birds of the Hour", set on a gentle arch (`title_arch`, in degrees; 0 = straight).
+- `title_font`: any file in `fonts/`. Fraunces, Fraunces Italic, Instrument Serif and Caveat
+  are included. `title_size` sets the size.
+- `archive_title`: "Birds of {date}" for the midnight collage.
+
+`mockup.py` draws every species you've drawn, once each, under each title font, and saves
+`out/mockup/fonts.png` to compare them. Change the arrangement with `--seed 2`.
+Poses are dealt like cards so birds on screen share as few poses as possible.
+
 **Preview output.** `*_eink.png` is the panel simulation using measured Spectra 6 colours.
 `*_truesize.png` opens at real size in Preview (View > Actual Size).
 

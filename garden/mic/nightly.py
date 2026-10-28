@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from birddisplay import eink, logbook, settings, sources  # noqa: E402
-from birddisplay.collage import Style, render_archive  # noqa: E402
+from birddisplay.collage import render_archive, style_for  # noqa: E402
 from birddisplay.species import registry  # noqa: E402
 from birddisplay.sprites import SpriteLibrary  # noqa: E402
 
@@ -45,7 +45,8 @@ def main() -> None:
     library = SpriteLibrary(Path(cfg["art_dir"]))
     detections = sources.from_birds_db(cfg["birds_db"], args.day, args.day)
 
-    frame = render_archive(detections, args.day, library, Style())
+    title = cfg.get("archive_title", "Birds of {date}").replace("{date}", f"{args.day.day} {args.day:%B}")
+    frame = render_archive(detections, args.day, library, style_for({**cfg, "title": title}))
     (data / "archive").mkdir(parents=True, exist_ok=True)
     frame.image.save(data / "archive" / f"{args.day}.png", optimize=True)
     eink.simulated(eink.quantize(frame.image)).save(data / "archive" / f"{args.day}_eink.png", optimize=True)
