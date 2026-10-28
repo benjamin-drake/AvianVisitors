@@ -76,10 +76,15 @@ def enclosed_background(rgb: np.ndarray, outside: np.ndarray, bg_colour, toleran
         return np.zeros_like(outside)
     idx = range(1, n + 1)
     sizes = ndimage.sum(near, labels, idx)
-    # Share of each patch that is essentially the paper colour. Its anti-aliased
-    # rim drags a plain standard deviation up, so count pixels instead.
-    paper = ndimage.sum(diff <= 6, labels, idx)
-    flat = [i for i, (size, p) in enumerate(zip(sizes, paper), start=1) if size >= 40 and p / size >= 0.8]
+    # Paper trapped between legs is close to the paper colour on average and
+    # mostly within a small margin of it, though shading near the bird can dim
+    # it a little. Painted whites (cheeks, neck rings) sit further off and vary
+    # more. Counting pixels, not a standard deviation, so the anti-aliased rim
+    # doesn't skew it.
+    paper = ndimage.sum(diff <= 12, labels, idx)
+    mean_diff = ndimage.mean(diff, labels, idx)
+    flat = [i for i, (size, p, md) in enumerate(zip(sizes, paper, mean_diff), start=1)
+            if size >= 40 and p / size >= 0.75 and md <= 9]
     return np.isin(labels, flat)
 
 

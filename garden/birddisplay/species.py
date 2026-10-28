@@ -54,12 +54,18 @@ class Registry:
     def match_filename(self, filename: str) -> list[Species]:
         """Species whose UK/BirdNET name appears as whole words in a file name.
         Longest name wins, so 'Mistle Thrush' beats 'Thrush'."""
-        text = " " + re.sub(r"[^a-z]+", " ", filename.lower()) + " "
+        plain = re.sub(r"[^a-z]+", " ", filename.lower()).split()
+        # Also try every word made singular, so "Five Chaffinches" finds Chaffinch.
+        texts = [" " + " ".join(ws) + " " for ws in (
+            plain,
+            [w[:-2] if w.endswith("es") else w for w in plain],
+            [w[:-1] if w.endswith("s") else w for w in plain],
+        )]
         hits: dict[str, tuple[int, Species]] = {}
         for s in self.species:
             for name in (s.uk_name, s.birdnet_name, s.sci):
                 words = " " + re.sub(r"[^a-z]+", " ", name.lower()).strip() + " "
-                if words in text:
+                if any(words in text for text in texts):
                     best = hits.get(s.sci, (0, s))[0]
                     hits[s.sci] = (max(best, len(words)), s)
         if not hits:
