@@ -58,9 +58,70 @@ def prepare(img: Image.Image, saturation: float = 1.3, contrast: float = 1.1) ->
     return Image.merge("RGB", channels)
 
 
-def quantize(img: Image.Image, **prep) -> Image.Image:
-    """Floyd-Steinberg dither to the six inks. Returns a 'P' image indexed like INKS."""
-    return prepare(img, **prep).quantize(palette=_palette(MEASURED_RGB), dither=Image.Dither.FLOYDSTEINBERG)
+def quantize(img: Image.Image, method: str = "floyd", **prep) -> Image.Image:
+    """Dither to the six inks. Returns a 'P' image indexed like INKS.
+
+    floyd     Floyd-Steinberg: passes on all of each pixel's colour error. Finest
+              shading, but busy speckle in mid-tones (Pillow, fast).
+    atkinson  Passes on only 3/4 of the error: cleaner flat areas and crisper
+              edges, slightly lighter and less detailed shading.
+    ordered   A fixed 8x8 Bayer pattern instead of spreading error: an even,
+              print-like texture with no wandering speckle.
+    """
+    prepared = prepare(img, **prep)
+    if method == "floyd":
+        return prepared.quantize(palette=_palette(MEASURED_RGB), dither=Image.Dither.FLOYDSTEINBERG)
+    rgb = np.asarray(prepared, dtype=np.float32)
+    if method == "atkinson":
+        idx = _atkinson(rgb)
+    elif method == "ordered":
+        idx = _ordered(rgb)
+    else:
+        raise ValueError(f"unknown dither method {method!r}")
+    out = Image.fromarray(idx.astype(np.uint8), "P")
+    out.putpalette(_palette(MEASURED_RGB).getpalette())
+    return out
+
+
+_INKS = np.array(MEASURED_RGB, dtype=np.float32)
+
+
+def _nearest(rgb: np.ndarray) -> np.ndarray:
+    """Index of the nearest ink for every pixel (rgb: ...x3)."""
+    d = ((rgb[..., None, :] - _INKS) ** 2).sum(axis=-1)
+    return d.argmin(axis=-1)
+
+
+def _ordered(rgb: np.ndarray, spread: float = 64.0) -> np.ndarray:
+    b = np.array([[0, 2], [3, 1]], dtype=np.float32)
+    for _ in range(2):  # 2x2 -> 8x8 Bayer matrix
+        b = np.block([[4 * b, 4 * b + 2], [4 * b + 3, 4 * b + 1]])
+    bayer = (b + 0.5) / b.size - 0.5
+    h, w, _ = rgb.shape
+    tile = np.tile(bayer, (h // 8 + 1, w // 8 + 1))[:h, :w]
+    return _nearest(rgb + tile[..., None] * spread)
+
+
+def _atkinson(rgb: np.ndarray) -> np.ndarray:
+    """Row by row; each row's error goes to the next pixels and two rows below."""
+    h, w, _ = rgb.shape
+    img = np.pad(rgb, ((0, 2), (0, 2), (0, 0)))  # room for error to spill off the edge
+    idx = np.zeros((h, w), dtype=np.uint8)
+    inks = _INKS
+    for y in range(h):
+        row, nxt, nxt2 = img[y], img[y + 1], img[y + 2]
+        for x in range(w):
+            px = row[x]
+            i = int(((inks - px) ** 2).sum(axis=1).argmin())
+            idx[y, x] = i
+            err = (px - inks[i]) / 8
+            row[x + 1] += err
+            row[x + 2] += err
+            nxt[x - 1 if x else 0] += err
+            nxt[x] += err
+            nxt[x + 1] += err
+            nxt2[x] += err
+    return idx
 
 
 def simulated(indexed: Image.Image) -> Image.Image:
