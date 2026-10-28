@@ -16,5 +16,7 @@
   "archive_title": "Birds of {date}",
   "on_time": "05:00",
   "off_time": "23:00",
-  "night_mode": false
+  "night_mode": false,
+  "dither_saturation": 1.0,
+  "dither_contrast": 1.0
 }

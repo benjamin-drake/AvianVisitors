@@ -157,7 +157,7 @@ def main() -> int:
         print(f"no change: {summary}")
         return 0
 
-    indexed = eink.quantize(image)
+    indexed = eink.quantize(image, saturation=cfg["dither_saturation"], contrast=cfg["dither_contrast"])
     eink.simulated(indexed).save(RUN / "frame.png")
     print(f"{'night' if night else 'day'}: {summary}" + (f"; no art yet: {', '.join(missing)}" if missing else ""))
     if args.preview:

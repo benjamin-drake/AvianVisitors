@@ -39,14 +39,17 @@ def _palette(colours) -> Image.Image:
     return pal
 
 
-def prepare(img: Image.Image, saturation: float = 1.3, contrast: float = 1.1) -> Image.Image:
+def prepare(img: Image.Image, saturation: float = 1.0, contrast: float = 1.0) -> Image.Image:
     """Squeeze the image into the panel's range before dithering.
 
     The panel's white is a light grey and its black is the darkest thing it can
     do, so map screen white -> panel white and screen black -> panel black.
     Without this every light tone above the panel's white collapses to white,
-    and pale plumage (a sparrow's belly) loses all detail. A saturation boost
-    offsets how muted the inks are.
+    and pale plumage (a sparrow's belly) loses all detail.
+
+    Saturation/contrast default to 1.0 ("natural", style B in dither_compare.py):
+    with detailed painted art a boost (style A: 1.3 / 1.1) pushes browns pink.
+    Set dither_saturation / dither_contrast in config.json to change it.
     """
     rgb = img.convert("RGB")
     if contrast != 1.0:

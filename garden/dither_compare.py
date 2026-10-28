@@ -14,8 +14,8 @@ from birddisplay import eink
 
 ROOT = Path(__file__).resolve().parent
 VARIANTS = [
-    ("A  Floyd-Steinberg, boosted (current)", dict(method="floyd", saturation=1.3, contrast=1.1)),
-    ("B  Floyd-Steinberg, natural colour", dict(method="floyd", saturation=1.0, contrast=1.0)),
+    ("A  Floyd-Steinberg, boosted", dict(method="floyd", saturation=1.3, contrast=1.1)),
+    ("B  Floyd-Steinberg, natural colour (current)", dict(method="floyd", saturation=1.0, contrast=1.0)),
     ("C  Atkinson", dict(method="atkinson", saturation=1.15, contrast=1.05)),
     ("D  Ordered (Bayer)", dict(method="ordered", saturation=1.15, contrast=1.05)),
 ]

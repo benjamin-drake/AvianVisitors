@@ -49,7 +49,8 @@ def main() -> None:
     frame = render_archive(detections, args.day, library, style_for({**cfg, "title": title}))
     (data / "archive").mkdir(parents=True, exist_ok=True)
     frame.image.save(data / "archive" / f"{args.day}.png", optimize=True)
-    eink.simulated(eink.quantize(frame.image)).save(data / "archive" / f"{args.day}_eink.png", optimize=True)
+    eink.simulated(eink.quantize(frame.image, saturation=cfg["dither_saturation"],
+                                  contrast=cfg["dither_contrast"])).save(data / "archive" / f"{args.day}_eink.png", optimize=True)
 
     log = logbook.write_hourly_log(detections, args.day, data / "log")
     todo = logbook.write_missing_art([], library, data / "missing_art.csv",
