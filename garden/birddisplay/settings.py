@@ -23,6 +23,9 @@ DEFAULTS = {
     "station_url": "http://birdnet.local",
     "rotate": 0,               # 180 if the frame hangs upside down
     "heal_hours": 24,          # redraw at least this often even if nothing changed
+    "on_time": "05:00",        # panel shows birds from...
+    "off_time": "23:00",       # ...until; outside these hours it's left blank
+    "night_mode": False,       # True: dark background with pale outlines between sunset and sunrise
 }
 
 

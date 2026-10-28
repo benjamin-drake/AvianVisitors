@@ -10,6 +10,9 @@ Each run asks the mic Pi which species were heard in the last 60 minutes
 and compares its signature (date, day/night, species on screen) with the
 last drawn one. Only a change, or the daily heal, refreshes the panel.
 
+Outside its hours (on_time to off_time, 05:00-23:00 by default) the panel is
+cleared to blank paper once and left alone; it comes back at on_time.
+
 If the mic Pi can't be reached the panel keeps its last picture; after 3
 hours without contact a small "no signal" mark is drawn so it's clear the
 frame isn't live. Logs: journalctl -u garden-frame
@@ -26,7 +29,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from PIL import ImageDraw  # noqa: E402
+from PIL import Image, ImageDraw  # noqa: E402
 
 from birddisplay import eink, settings, sources  # noqa: E402
 from birddisplay.collage import render_live, style_for  # noqa: E402
@@ -68,6 +71,12 @@ def push(indexed, rotate: int, fake: bool = False) -> None:
         epd.close()
 
 
+def in_hours(now: datetime, on: str, off: str) -> bool:
+    """True between on and off ("05:00", "23:00"); handles windows that cross midnight."""
+    t = now.strftime("%H:%M")
+    return on <= t < off if on < off else t >= on or t < off
+
+
 def no_signal_mark(img) -> None:
     """A small hollow circle in the corner: 'not live'."""
     d = ImageDraw.Draw(img)
@@ -102,6 +111,22 @@ def main() -> int:
     library = SpriteLibrary(Path(cfg["art_dir"]))
     now_ts = time.time()
 
+    if not (in_hours(datetime.now(), cfg["on_time"], cfg["off_time"]) or args.force or args.preview):
+        if state.get("signature") == "off":
+            print(f"off hours (back at {cfg['on_time']})")
+            return 0
+        style = style_for(cfg)
+        blank = eink.quantize(Image.new("RGB", (style.width, style.height), style.day_bg))
+        try:
+            push(blank, cfg["rotate"], args.fake_panel)
+        except Exception as e:
+            print(f"panel clear failed: {e}", file=sys.stderr)
+            return 1
+        print(f"off hours: panel cleared until {cfg['on_time']}")
+        state.update(signature="off", last_refresh=now_ts, stale_drawn=False)
+        save_state(state_path, state)
+        return 0
+
     try:
         station_now, recent = sources.from_station_api(cfg["station_url"], linger)
         state["last_contact"] = now_ts
@@ -116,7 +141,8 @@ def main() -> int:
         print(f"no contact for {since / 3600:.1f} h: marking the frame as not live")
         station_now, recent, stale = datetime.now(), [], True
 
-    night = is_night(station_now, cfg["latitude"], cfg["longitude"])
+    # Night mode (dark background, pale outlines) is off unless config turns it on.
+    night = cfg["night_mode"] and is_night(station_now, cfg["latitude"], cfg["longitude"])
     entries = [(r.sci, r.common, r.count) for r in recent]
     image, tiles, sig = render_live(entries, station_now.date(), library, style_for(cfg), night)
     if stale:

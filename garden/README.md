@@ -168,8 +168,12 @@ journalctl -u garden-frame -n 50                   # frame log (on the frame Pi)
   scene always looks the same that day.
 - **Packing:** ported from upstream's silhouette nester. Sizes come from calls^0.35 times the
   species size in `species.csv`, with no bird larger than 15% of the screen.
-- **Night:** between sunset and sunrise at 52.77°N, 0.89°W, a black background with a 2 px
-  pale outline.
+- **Hours:** birds show from 05:00 to 23:00 (`on_time`, `off_time`). Outside those
+  hours the panel is cleared to blank paper once and left alone. The mic keeps
+  listening all night, so owls still reach the logs, the archive and the summary.
+- **Always light:** the same pale background at any hour. A dark night style (black
+  background, pale outlines, between sunset and sunrise) is still there if you want it:
+  set `"night_mode": true`.
 - **Redraws:** checked every 15 minutes, and the panel only redraws when the species with art,
   or day/night mode, changes. There's also a daily redraw to keep the panel healthy.
 - **If the mic Pi goes quiet:** the picture stays as it was. After 3 hours without contact the

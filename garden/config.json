@@ -13,5 +13,8 @@
   "title_font": "Fraunces-Display.ttf",
   "title_size": 66,
   "title_arch": 24,
-  "archive_title": "Birds of {date}"
+  "archive_title": "Birds of {date}",
+  "on_time": "05:00",
+  "off_time": "23:00",
+  "night_mode": false
 }

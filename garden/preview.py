@@ -53,8 +53,9 @@ def save_all(img: Image.Image, stem: Path, true_size: bool = True) -> Image.Imag
     return sim
 
 
-def contact_sheet(frames, cols: int = 8, scale: float = 0.2) -> Image.Image:
-    tw, th = int(eink.WIDTH * scale), int(eink.HEIGHT * scale)
+def contact_sheet(frames, cols: int = 12, scale: float = 0.16) -> Image.Image:
+    w, h = frames[0][1].size
+    tw, th = int(w * scale), int(h * scale)
     lab = 14
     rows = -(-len(frames) // cols)
     sheet = Image.new("RGB", (cols * (tw + 6) + 6, rows * (th + lab + 6) + 6), (90, 90, 90))
@@ -75,7 +76,8 @@ def main() -> None:
     when.add_argument("--archive", type=date.fromisoformat)
     when.add_argument("--logs", type=date.fromisoformat)
     ap.add_argument("--every", type=int, default=15, help="minutes between frames with --day")
-    ap.add_argument("--mode", choices=("auto", "day", "night"), default="auto")
+    ap.add_argument("--mode", choices=("auto", "day", "night"), default="auto",
+                    help="auto: follow config (light all day unless night_mode is on)")
     ap.add_argument("--stand-ins", action="store_true")
     ap.add_argument("--out", type=Path, default=ROOT / "out")
     args = ap.parse_args()
@@ -89,7 +91,9 @@ def main() -> None:
     detections = load_detections(args.detections)
     prefix = "stress_" if args.stand_ins else ""
     night_at = (lambda t: args.mode == "night") if args.mode != "auto" else \
-        (lambda t: is_night(t, cfg["latitude"], cfg["longitude"]))
+        (lambda t: cfg.get("night_mode", False) and is_night(t, cfg["latitude"], cfg["longitude"]))
+    on, off = cfg.get("on_time", "05:00"), cfg.get("off_time", "23:00")
+    hours = (lambda t: on <= f"{t:%H:%M}" < off) if on < off else (lambda t: f"{t:%H:%M}" >= on or f"{t:%H:%M}" < off)
 
     if args.logs:
         log = logbook.write_hourly_log(detections, args.logs, args.out / "log")
@@ -123,13 +127,18 @@ def main() -> None:
 
     frames, last_sig, redraws = [], None, 0
     t = datetime.combine(args.day, datetime.min.time())
+    blank = Image.new("RGB", (style.width, style.height), style.day_bg)
     while t.date() == args.day:
-        frame = render_screen(detections, t, library, style, night_at(t), linger)
-        changed = frame.signature != last_sig
+        if hours(t):
+            frame = render_screen(detections, t, library, style, night_at(t), linger)
+            sig, image, label = frame.signature, frame.image, f"{'N' if frame.night else 'D'} {len(frame.tiles)}"
+        else:
+            sig, image, label = "off", blank, "off"
+        changed = sig != last_sig
         redraws += changed
-        last_sig = frame.signature
-        sim = save_all(frame.image, args.out / f"{prefix}frames" / f"{t:%H%M}", true_size=False)
-        frames.append((f"{t:%H:%M} {'N' if frame.night else 'D'} {len(frame.tiles)}{' *' if changed else ''}", sim))
+        last_sig = sig
+        sim = save_all(image, args.out / f"{prefix}frames" / f"{t:%H%M}", true_size=False)
+        frames.append((f"{t:%H:%M} {label}{' *' if changed else ''}", sim))
         t += timedelta(minutes=args.every)
     path = args.out / f"{prefix}contact_{args.day}.png"
     contact_sheet(frames).save(path)
