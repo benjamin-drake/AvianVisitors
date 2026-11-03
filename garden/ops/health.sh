@@ -3,6 +3,7 @@
 #   ssh birdnet ~/garden/garden/ops/health.sh
 #   ssh birdframe ~/garden/garden/ops/health.sh
 set -uo pipefail
+PATH=$PATH:/usr/sbin:/sbin   # swapon lives here; not on a plain ssh user's PATH
 GARDEN=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 DATA=$HOME/garden-data
 
