@@ -7,6 +7,7 @@
 # Safe to re-run. The swap and noatime changes take effect after a reboot.
 set -euo pipefail
 SIZE=${1:-1024}
+PATH=$PATH:/usr/sbin:/sbin   # swapon lives here; not on a plain ssh user's PATH
 
 sudo mkdir -p /etc/systemd/journald.conf.d
 printf '[Journal]\nStorage=volatile\nRuntimeMaxUse=40M\n' \
@@ -21,6 +22,9 @@ if dpkg -s dphys-swapfile >/dev/null 2>&1; then
 fi
 if swapon --show=NAME --noheadings | grep -q zram; then
   echo "  zram swap: already on"
+elif dpkg -s rpi-swap >/dev/null 2>&1; then
+  # Raspberry Pi OS Trixie and later set up zram swap at boot themselves.
+  echo "  zram swap: Raspberry Pi OS's rpi-swap starts it at boot"
 elif systemctl is-enabled zram.service >/dev/null 2>&1; then
   # BirdNET-Pi's own zram.service (installed on small Pis); starts at boot.
   echo "  zram swap: BirdNET-Pi's zram.service will start it after reboot"
