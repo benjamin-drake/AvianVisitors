@@ -10,6 +10,8 @@
   ],
   "orientation": "portrait",
   "title": "Birds of the Hour",
+  "title_today": "Birds of Today",
+  "title_yesterday": "Birds of Yesterday",
   "title_font": "Fraunces-Display.ttf",
   "title_size": 66,
   "title_arch": 24,

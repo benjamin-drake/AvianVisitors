@@ -6,12 +6,15 @@
     python3 garden/frame/frame.py --preview    # render to /dev/shm/garden-frame/frame.png, panel untouched
 
 Each run asks the mic Pi which species were heard in the last 60 minutes
-(upstream's /avian/api/birdnet-api.php?action=recent), renders the collage,
-and compares its signature (date, day/night, species on screen) with the
-last drawn one. Only a change, or the daily heal, refreshes the panel.
+(upstream's /avian/api/birdnet-api.php?action=recent) and shows them as
+"Birds of the Hour". If none of them has art it shows "Birds of Today"
+instead, and before the first bird of the day "Birds of Yesterday"
+(birddisplay/scenes.py). The render's signature (view, date, species) is
+compared with the last drawn one; only a change, or the daily heal,
+refreshes the panel.
 
-Outside its hours (on_time to off_time, 05:00-23:00 by default) the panel is
-cleared to blank paper once and left alone; it comes back at on_time.
+Outside its hours (on_time to off_time, 05:00-23:00 by default) the panel
+shows "Birds of Today" once and holds it until on_time.
 
 If the mic Pi can't be reached the panel keeps its last picture; after 3
 hours without contact a small "no signal" mark is drawn so it's clear the
@@ -29,9 +32,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from PIL import Image, ImageDraw  # noqa: E402
+from PIL import ImageDraw  # noqa: E402
 
-from birddisplay import eink, settings, sources  # noqa: E402
+from birddisplay import eink, scenes, settings, sources  # noqa: E402
 from birddisplay.collage import render_live, style_for  # noqa: E402
 from birddisplay.sprites import SpriteLibrary  # noqa: E402
 from birddisplay.sun import is_night  # noqa: E402
@@ -111,24 +114,17 @@ def main() -> int:
     library = SpriteLibrary(Path(cfg["art_dir"]))
     now_ts = time.time()
 
-    if not (in_hours(datetime.now(), cfg["on_time"], cfg["off_time"]) or args.force or args.preview):
-        if state.get("signature") == "off":
-            print(f"off hours (back at {cfg['on_time']})")
-            return 0
-        style = style_for(cfg)
-        blank = eink.quantize(Image.new("RGB", (style.width, style.height), style.day_bg))
-        try:
-            push(blank, cfg["rotate"], args.fake_panel)
-        except Exception as e:
-            print(f"panel clear failed: {e}", file=sys.stderr)
-            return 1
-        print(f"off hours: panel cleared until {cfg['on_time']}")
-        state.update(signature="off", last_refresh=now_ts, stale_drawn=False)
-        save_state(state_path, state)
+    # Off hours: show the day's birds once, then hold them (no redraws) until on_time.
+    hold = not (in_hours(datetime.now(), cfg["on_time"], cfg["off_time"]) or args.force or args.preview)
+    hold_sig = f"hold|{scenes.bird_day_start(datetime.now(), cfg['on_time']).date()}"
+    if hold and state.get("signature") == hold_sig:
+        print(f"off hours: holding the day's birds until {cfg['on_time']}")
         return 0
 
     try:
         station_now, recent = sources.from_station_api(cfg["station_url"], linger)
+        scene = scenes.pick([] if hold else recent, station_now, cfg, library.drawable,
+                            lambda a, b: sources.from_station_hours(cfg["station_url"], a, b))
         state["last_contact"] = now_ts
         stale = False
     except Exception as e:  # network, mic Pi rebooting, etc.
@@ -139,16 +135,18 @@ def main() -> int:
             save_state(state_path, state)
             return 0
         print(f"no contact for {since / 3600:.1f} h: marking the frame as not live")
-        station_now, recent, stale = datetime.now(), [], True
+        station_now, stale = datetime.now(), True
+        scene = scenes.Scene("hour", cfg["title"], [], station_now.date())
 
     # Night mode (dark background, pale outlines) is off unless config turns it on.
     night = cfg["night_mode"] and is_night(station_now, cfg["latitude"], cfg["longitude"])
-    entries = [(r.sci, r.common, r.count) for r in recent]
-    image, tiles, sig = render_live(entries, station_now.date(), library, style_for(cfg), night)
+    image, tiles, sig = render_live(scene.entries, scene.day, library,
+                                    style_for({**cfg, "title": scene.title}), night)
+    sig = hold_sig if hold else f"{scene.view}|{sig}"
     if stale:
         no_signal_mark(image)
         sig = "stale"
-    missing = sorted(r.common for r in recent if not library.has(r.sci))
+    missing = sorted(c for s, c, _ in scene.entries if not library.has(s))
 
     heal_due = now_ts - state.get("last_refresh", 0) >= cfg["heal_hours"] * 3600
     changed = sig != state.get("signature")
@@ -159,7 +157,8 @@ def main() -> int:
 
     indexed = eink.quantize(image, saturation=cfg["dither_saturation"], contrast=cfg["dither_contrast"])
     eink.simulated(indexed).save(RUN / "frame.png")
-    print(f"{'night' if night else 'day'}: {summary}" + (f"; no art yet: {', '.join(missing)}" if missing else ""))
+    print(f"{scene.title}{' (night style)' if night else ''}: {summary}"
+          + (f"; no art yet: {', '.join(missing)}" if missing else ""))
     if args.preview:
         print(f"preview -> {RUN / 'frame.png'}")
         return 0

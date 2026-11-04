@@ -7,6 +7,8 @@
 Every few minutes it asks the mic Pi who was heard in the last 60 minutes (the
 same API call the frame Pi makes), renders with your art from art/, and the
 page picks up the new picture. Open it in a browser and go full screen.
+Like the frame, it falls back to "Birds of Today" and then "Birds of
+Yesterday" when the last hour has no birds with art.
 
 The page shows the e-ink simulation by default; press C for the full-colour
 artwork and E to go back. It ignores the panel's on/off hours.
@@ -22,7 +24,7 @@ from datetime import timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from birddisplay import eink, settings, sources
+from birddisplay import eink, scenes, settings, sources
 from birddisplay.collage import render_live, style_for
 from birddisplay.species import registry
 from birddisplay.sprites import SpriteLibrary
@@ -52,7 +54,7 @@ async function tick() {
       img.dataset.mode = mode;
     }
     document.getElementById("info").innerHTML =
-      `<b>On screen:</b> ${s.birds.join(", ") || "no birds"}<br>` +
+      `<b>${s.title || "On screen"}:</b> ${s.birds.join(", ") || "no birds"}<br>` +
       (s.missing.length ? `<b>No art yet:</b> ${s.missing.join(", ")}<br>` : "") +
       `Updated ${s.updated}` + (s.error ? `<br><b>Mic Pi unreachable:</b> ${s.error}` : "") +
       `<br>${mode === "eink" ? "E-ink simulation (C for colour)" : "Colour artwork (E for e-ink)"}`;
@@ -74,7 +76,6 @@ class Frame:
     def __init__(self, cfg: dict, station: str):
         self.cfg, self.station = cfg, station
         self.library = SpriteLibrary(Path(cfg["art_dir"]))
-        self.style = style_for(cfg)
         self.lock = threading.Lock()
         self.signature = None
         self.state = {"version": 0, "birds": [], "missing": [], "updated": "never", "error": ""}
@@ -83,16 +84,19 @@ class Frame:
     def refresh(self) -> None:
         try:
             now, recent = sources.from_station_api(self.station, timedelta(minutes=self.cfg["linger_minutes"]))
+            scene = scenes.pick(recent, now, self.cfg, self.library.drawable,
+                                lambda a, b: sources.from_station_hours(self.station, a, b))
         except Exception as e:  # keep the last picture, as the real frame does
             with self.lock:
                 self.state = {**self.state, "error": str(e), "updated": time.strftime("%H:%M")}
-            print(f"mic Pi unreachable: {e}")
+            print(f"mic Pi unreachable: {e}", flush=True)
             return
-        entries = [(r.sci, r.common, r.count) for r in recent]
-        image, tiles, sig = render_live(entries, now.date(), self.library, self.style, False)
+        image, tiles, sig = render_live(scene.entries, scene.day, self.library,
+                                        style_for({**self.cfg, "title": scene.title}), False)
+        sig = f"{scene.view}|{sig}"
         name = lambda sci, common: registry().resolve(sci, common).uk_name  # noqa: E731
         birds = [name(t.sci, t.common) for t in tiles]
-        missing = sorted(name(r.sci, r.common) for r in recent if not self.library.has(r.sci))
+        missing = sorted(name(s, c) for s, c, _ in scene.entries if not self.library.has(s))
         with self.lock:
             if sig != self.signature or not self.png:
                 indexed = eink.quantize(image, saturation=self.cfg["dither_saturation"],
@@ -100,8 +104,8 @@ class Frame:
                 self.png = {"color": encode(image), "eink": encode(eink.simulated(indexed))}
                 self.signature = sig
                 self.state["version"] += 1
-                print(f"{now:%H:%M} new scene: {', '.join(birds) or '(no birds)'}", flush=True)
-            self.state.update(birds=birds, missing=missing,
+                print(f"{now:%H:%M} {scene.title}: {', '.join(birds) or '(no birds)'}", flush=True)
+            self.state.update(title=scene.title, birds=birds, missing=missing,
                               updated=f"{now:%H:%M}", error="")
 
     def loop(self, every: int) -> None:
@@ -153,7 +157,7 @@ def main() -> None:
     frame = Frame(settings.load(), args.station)
     frame.refresh()
     threading.Thread(target=frame.loop, args=(args.every,), daemon=True).start()
-    print(f"Birds of the Hour: http://localhost:{args.port}  (Ctrl-C to stop)")
+    print(f"Web frame: http://localhost:{args.port}  (Ctrl-C to stop)")
     ThreadingHTTPServer(("127.0.0.1", args.port), handler(frame)).serve_forever()
 
 

@@ -167,14 +167,21 @@ journalctl -u garden-frame -n 50                   # frame log (on the frame Pi)
 ## How the frame decides what to show
 - **On screen:** a bird appears when heard and stays 60 minutes after it was last heard
   (`linger_minutes`). Each new detection resets that timer.
+- **Never an empty screen:** if no bird with art was heard in the last hour, the frame
+  shows "Birds of Today", every bird heard so far today sized by its calls. Before the
+  first bird of the morning it shows "Birds of Yesterday". This covers winter evenings,
+  the midday lull and rainy days. The day runs from `on_time` (05:00), not midnight,
+  so a 2 a.m. owl counts towards the evening before and appears in the next morning's
+  "Birds of Yesterday". Titles: `title`, `title_today`, `title_yesterday`.
 - **Scene changes:** when a bird arrives or leaves, every bird gets a fresh pose (of five),
   mirroring, size and position. These are seeded by date and the set of birds, so a given
   scene always looks the same that day.
 - **Packing:** ported from upstream's silhouette nester. Sizes come from calls^0.35 times the
   species size in `species.csv`, with no bird larger than 15% of the screen.
-- **Hours:** birds show from 05:00 to 23:00 (`on_time`, `off_time`). Outside those
-  hours the panel is cleared to blank paper once and left alone. The mic keeps
-  listening all night, so owls still reach the logs, the archive and the summary.
+- **Hours:** the frame follows the birds from 05:00 to 23:00 (`on_time`, `off_time`).
+  At 23:00 it draws "Birds of Today" and holds it overnight without redrawing; e-ink
+  keeps a picture with no power. The mic keeps listening all night, so owls still
+  reach the logs, the archive, the summary and the next morning's "Birds of Yesterday".
 - **Always light:** the same pale background at any hour. A dark night style (black
   background, pale outlines, between sunset and sunrise) is still there if you want it:
   set `"night_mode": true`.

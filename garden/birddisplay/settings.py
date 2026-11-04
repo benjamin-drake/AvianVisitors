@@ -23,8 +23,11 @@ DEFAULTS = {
     "station_url": "http://birdnet.local",
     "rotate": 0,               # 180 if the frame hangs upside down
     "heal_hours": 24,          # redraw at least this often even if nothing changed
-    "on_time": "05:00",        # panel shows birds from...
-    "off_time": "23:00",       # ...until; outside these hours it's left blank
+    "title": "Birds of the Hour",          # the last hour's birds
+    "title_today": "Birds of Today",       # shown when the last hour has none
+    "title_yesterday": "Birds of Yesterday",  # ...and before the first bird of the day
+    "on_time": "05:00",        # panel follows the birds from...
+    "off_time": "23:00",       # ...until; then it holds "Birds of Today" overnight
     "night_mode": False,       # True: dark background with pale outlines between sunset and sunrise
     "dither_saturation": 1.0,  # 1.0/1.0 = natural colour (style B); 1.3/1.1 = boosted (style A)
     "dither_contrast": 1.0,

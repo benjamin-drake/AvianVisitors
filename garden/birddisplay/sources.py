@@ -56,18 +56,48 @@ def from_station_api(base_url: str, linger: timedelta, timeout: float = 20) -> t
     """Species heard within `linger` of the station's clock, via upstream's
     /avian/api/birdnet-api.php?action=recent. Returns (station time, species)."""
     hours = max(1, -(-int(linger.total_seconds()) // 3600))
-    url = f"{base_url.rstrip('/')}/avian/api/birdnet-api.php?action=recent&hours={hours}"
-    req = urllib.request.Request(url, headers={"User-Agent": "garden-frame/1"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        data = json.loads(r.read(2_000_000))
+    data = _station_json(base_url, f"action=recent&hours={hours}", timeout)
     # Use the station's clock, not ours, so a drifting frame clock can't expire birds early.
-    now = datetime.fromisoformat(data["as_of"]).replace(tzinfo=None) if data.get("as_of") else datetime.now()
+    # "anchor" is the station's local time, the clock last_seen is written in; "as_of"
+    # is PHP's clock, which is UTC on a stock Pi (an hour out in summer).
+    if data.get("anchor"):
+        now = datetime.fromisoformat(data["anchor"])
+    elif data.get("as_of"):
+        now = datetime.fromisoformat(data["as_of"]).astimezone().replace(tzinfo=None)
+    else:
+        now = datetime.now()
     out = []
     for s in data.get("species", []):
         last = datetime.fromisoformat(s["last_seen"])
         if now - last < linger:
             out.append(Recent(s["sci"], s.get("com") or s["sci"], int(s.get("n") or 1), last))
     return now, out
+
+
+def _station_json(base_url: str, query: str, timeout: float) -> dict:
+    url = f"{base_url.rstrip('/')}/avian/api/birdnet-api.php?{query}"
+    req = urllib.request.Request(url, headers={"User-Agent": "garden-frame/1"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read(2_000_000))
+
+
+def from_station_hours(base_url: str, start: datetime, end: datetime, timeout: float = 20) -> list[Recent]:
+    """Species heard in the whole hours from `start` up to `end`, via upstream's
+    ?action=hourly (per-hour counts for one calendar day, its top 30 species).
+    last_heard is the start of the last hour the species was heard in."""
+    totals: dict[str, list] = {}
+    day = start.date()
+    while day <= end.date():
+        data = _station_json(base_url, f"action=hourly&date={day}&limit=30", timeout)
+        for s in data.get("species", []):
+            for h in s.get("hours", []):
+                t = datetime.combine(day, datetime.min.time()).replace(hour=int(h["hour"]))
+                if start <= t < end:
+                    e = totals.setdefault(s["sci"], [s.get("com") or s["sci"], 0, t])
+                    e[1] += int(h["n"])
+                    e[2] = max(e[2], t)
+        day += timedelta(days=1)
+    return [Recent(sci, com, n, last) for sci, (com, n, last) in totals.items()]
 
 
 def species_totals(db: Path) -> list[tuple[str, str, int, datetime, datetime]]:
