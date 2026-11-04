@@ -50,6 +50,10 @@ in flight, feeding. They can be transparent or on white.
   are included. `title_size` sets the size.
 - `archive_title`: "Birds of {date}" for the midnight collage.
 
+**A stand-in frame on the Mac** until the panel arrives: `.venv/bin/python webframe.py`, then open
+<http://localhost:8765> and go full screen. It shows the live birds from the mic Pi with your art
+(press C for colour, E for the e-ink simulation). Away from home use `--station http://birdnet`.
+
 `mockup.py` draws every species you've drawn, once each, under each title font, and saves
 `out/mockup/fonts.png` to compare them. Change the arrangement with `--seed 2`.
 Poses are dealt like cards so birds on screen share as few poses as possible.
