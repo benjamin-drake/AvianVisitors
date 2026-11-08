@@ -3,6 +3,7 @@
 
     .venv/bin/python webframe.py                          # http://localhost:8765
     .venv/bin/python webframe.py --station http://birdnet # over Tailscale, away from home
+    python3 webframe.py --host 0.0.0.0 --panel-hours       # always-on test server (see ops/webframe/)
 
 Every few minutes it asks the mic Pi who was heard in the last 60 minutes (the
 same API call the frame Pi makes), renders with your art from art/, and the
@@ -11,7 +12,9 @@ Like the frame, it falls back to "Birds of Today" and then "Birds of
 Yesterday" when the last hour has no birds with art.
 
 The page shows the e-ink simulation by default; press C for the full-colour
-artwork and E to go back. It ignores the panel's on/off hours.
+artwork and E to go back. It ignores the panel's on/off hours unless you pass
+--panel-hours: then, like the real frame, from off_time to on_time it draws
+"Birds of Today" once and holds it.
 """
 from __future__ import annotations
 
@@ -56,7 +59,7 @@ async function tick() {
     document.getElementById("info").innerHTML =
       `<b>${s.title || "On screen"}:</b> ${s.birds.join(", ") || "no birds"}<br>` +
       (s.missing.length ? `<b>No art yet:</b> ${s.missing.join(", ")}<br>` : "") +
-      `Updated ${s.updated}` + (s.error ? `<br><b>Mic Pi unreachable:</b> ${s.error}` : "") +
+      `Updated ${s.updated}` + (s.hold ? " (held overnight, as the panel would)" : "") + (s.error ? `<br><b>Mic Pi unreachable:</b> ${s.error}` : "") +
       `<br>${mode === "eink" ? "E-ink simulation (C for colour)" : "Colour artwork (E for e-ink)"}`;
   } catch (e) {}
 }
@@ -73,8 +76,8 @@ tick(); setInterval(tick, 30000);
 class Frame:
     """The latest render, refreshed by a background thread."""
 
-    def __init__(self, cfg: dict, station: str):
-        self.cfg, self.station = cfg, station
+    def __init__(self, cfg: dict, station: str, panel_hours: bool = False):
+        self.cfg, self.station, self.panel_hours = cfg, station, panel_hours
         self.library = SpriteLibrary(Path(cfg["art_dir"]))
         self.lock = threading.Lock()
         self.signature = None
@@ -84,7 +87,14 @@ class Frame:
     def refresh(self) -> None:
         try:
             now, recent = sources.from_station_api(self.station, timedelta(minutes=self.cfg["linger_minutes"]))
-            scene = scenes.pick(recent, now, self.cfg, self.library.drawable,
+            # The station's own clock, so the container's time zone doesn't matter.
+            hold = self.panel_hours and not scenes.in_hours(now, self.cfg["on_time"], self.cfg["off_time"])
+            hold_sig = f"hold|{scenes.bird_day_start(now, self.cfg['on_time']).date()}"
+            if hold and self.signature == hold_sig:
+                with self.lock:
+                    self.state.update(updated=f"{now:%H:%M}", error="")
+                return
+            scene = scenes.pick([] if hold else recent, now, self.cfg, self.library.drawable,
                                 lambda a, b: sources.from_station_hours(self.station, a, b))
         except Exception as e:  # keep the last picture, as the real frame does
             with self.lock:
@@ -93,7 +103,7 @@ class Frame:
             return
         image, tiles, sig = render_live(scene.entries, scene.day, self.library,
                                         style_for({**self.cfg, "title": scene.title}), False)
-        sig = f"{scene.view}|{sig}"
+        sig = hold_sig if hold else f"{scene.view}|{sig}"
         name = lambda sci, common: registry().resolve(sci, common).uk_name  # noqa: E731
         birds = [name(t.sci, t.common) for t in tiles]
         missing = sorted(name(s, c) for s, c, _ in scene.entries if not self.library.has(s))
@@ -104,8 +114,9 @@ class Frame:
                 self.png = {"color": encode(image), "eink": encode(eink.simulated(indexed))}
                 self.signature = sig
                 self.state["version"] += 1
-                print(f"{now:%H:%M} {scene.title}: {', '.join(birds) or '(no birds)'}", flush=True)
-            self.state.update(title=scene.title, birds=birds, missing=missing,
+                held = " (held overnight)" if hold else ""
+                print(f"{now:%H:%M} {scene.title}{held}: {', '.join(birds) or '(no birds)'}", flush=True)
+            self.state.update(hold=hold, title=scene.title, birds=birds, missing=missing,
                               updated=f"{now:%H:%M}", error="")
 
     def loop(self, every: int) -> None:
@@ -150,15 +161,18 @@ def handler(frame: Frame):
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--station", default="http://birdnet.local", help="the mic Pi (default %(default)s)")
+    ap.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to serve the whole network (default %(default)s)")
     ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--panel-hours", action="store_true",
+                    help="hold 'Birds of Today' overnight, as the panel does")
     ap.add_argument("--every", type=int, default=120, help="seconds between checks (default %(default)s)")
     args = ap.parse_args()
 
-    frame = Frame(settings.load(), args.station)
+    frame = Frame(settings.load(), args.station, args.panel_hours)
     frame.refresh()
     threading.Thread(target=frame.loop, args=(args.every,), daemon=True).start()
-    print(f"Web frame: http://localhost:{args.port}  (Ctrl-C to stop)")
-    ThreadingHTTPServer(("127.0.0.1", args.port), handler(frame)).serve_forever()
+    print(f"Web frame: http://{args.host}:{args.port}  (Ctrl-C to stop)", flush=True)
+    ThreadingHTTPServer((args.host, args.port), handler(frame)).serve_forever()
 
 
 if __name__ == "__main__":

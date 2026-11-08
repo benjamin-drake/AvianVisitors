@@ -33,6 +33,12 @@ def bird_day_start(now: datetime, on_time: str) -> datetime:
     return start if now >= start else start - timedelta(days=1)
 
 
+def in_hours(now: datetime, on: str, off: str) -> bool:
+    """True between on and off ("05:00", "23:00"); handles windows that cross midnight."""
+    t = now.strftime("%H:%M")
+    return on <= t < off if on < off else t >= on or t < off
+
+
 def pick(recent: list[Recent], now: datetime, cfg: dict, drawable: Callable[[str], bool],
          fetch: Fetch) -> Scene:
     """recent: the last hour's species (pass [] to skip straight to the day views)."""

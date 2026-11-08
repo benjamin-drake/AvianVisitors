@@ -53,6 +53,8 @@ in flight, feeding. They can be transparent or on white.
 **A stand-in frame on the Mac** until the panel arrives: `.venv/bin/python webframe.py`, then open
 <http://localhost:8765> and go full screen. It shows the live birds from the mic Pi with your art
 (press C for colour, E for the e-ink simulation). Away from home use `--station http://birdnet`.
+For an always-on copy, `ops/webframe/deploy.sh` runs it in Docker on the home server
+(<http://linuxserver.tail8c80fe.ts.net:8765>), following the panel's hours. Re-run it after new art.
 
 `mockup.py` draws every species you've drawn, once each, under each title font, and saves
 `out/mockup/fonts.png` to compare them. Change the arrangement with `--seed 2`.

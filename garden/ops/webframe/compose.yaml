@@ -1,0 +1,11 @@
+services:
+  garden-webframe:
+    build: .
+    container_name: garden-webframe
+    restart: unless-stopped
+    environment:
+      STATION: http://100.104.175.7   # the mic Pi over Tailscale: works at home and once it's at the farm
+    volumes:
+      - ./garden:/app:ro
+    ports:
+      - "8765:8765"

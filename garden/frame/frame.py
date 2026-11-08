@@ -74,12 +74,6 @@ def push(indexed, rotate: int, fake: bool = False) -> None:
         epd.close()
 
 
-def in_hours(now: datetime, on: str, off: str) -> bool:
-    """True between on and off ("05:00", "23:00"); handles windows that cross midnight."""
-    t = now.strftime("%H:%M")
-    return on <= t < off if on < off else t >= on or t < off
-
-
 def no_signal_mark(img) -> None:
     """A small hollow circle in the corner: 'not live'."""
     d = ImageDraw.Draw(img)
@@ -115,7 +109,7 @@ def main() -> int:
     now_ts = time.time()
 
     # Off hours: show the day's birds once, then hold them (no redraws) until on_time.
-    hold = not (in_hours(datetime.now(), cfg["on_time"], cfg["off_time"]) or args.force or args.preview)
+    hold = not (scenes.in_hours(datetime.now(), cfg["on_time"], cfg["off_time"]) or args.force or args.preview)
     hold_sig = f"hold|{scenes.bird_day_start(datetime.now(), cfg['on_time']).date()}"
     if hold and state.get("signature") == hold_sig:
         print(f"off hours: holding the day's birds until {cfg['on_time']}")
