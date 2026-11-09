@@ -2,14 +2,14 @@
 
 An e-ink bird frame built on AvianVisitors. A Raspberry Pi 3B runs BirdNET-Pi with a
 microphone outside. A Pi Zero W (or Zero 2 W) drives a Waveshare 9.7" e-Paper HAT+ (E)
-(Spectra 6, 1120x784) showing the birds heard in the last hour, drawn from your own
-illustrations.
+(Spectra 6, 1120x784) showing the birds heard today, the last hour's drawn larger,
+from your own illustrations.
 
 ```
  mic outside ── Pi 3B "birdnet"                      Pi Zero W "birdframe"
-                 stock AvianVisitors/BirdNET-Pi  <──── every 15 min: who was heard in the
-                 + garden/ (this folder):        HTTP   last 60 min? Redraw only if that
-                   00:10 archive, hourly log,           changed (or day/night flipped)
+                 stock AvianVisitors/BirdNET-Pi  <──── every 15 min: who was heard today,
+                 + garden/ (this folder):        HTTP   and in the last 60 min? Redraw only
+                   00:10 archive, hourly log,           if that changed
                          drawing queue
                    07:00 morning summary (email/text)
         both on Tailscale ─── ssh from anywhere
@@ -45,7 +45,10 @@ in flight, feeding. They can be transparent or on white.
 
 **Look of the frame** (`config.json`):
 - `orientation`: `portrait` (784x1120, as hung) or `landscape`.
-- `title`: "Birds of the Hour", set on a gentle arch (`title_arch`, in degrees; 0 = straight).
+- `main_view`: `today` (the day's birds, the last hour's drawn larger) or `hour` (the
+  last hour's birds only, as first designed). `max_birds`: at most this many on screen (20).
+- `title_today` "Birds of Today", `title_yesterday`, and `title` "Birds of the Hour" (hour view),
+  set on a gentle arch (`title_arch`, in degrees; 0 = straight).
 - `title_font`: any file in `fonts/`. Fraunces, Fraunces Italic, Instrument Serif and Caveat
   are included. `title_size` sets the size.
 - `archive_title`: "Birds of {date}" for the midnight collage.
@@ -167,15 +170,18 @@ journalctl -u garden-frame -n 50                   # frame log (on the frame Pi)
 - `summaries/`: the morning summaries.
 
 ## How the frame decides what to show
-- **On screen:** a bird appears when heard and stays 60 minutes after it was last heard
-  (`linger_minutes`). Each new detection resets that timer.
-- **Never an empty screen:** if no bird with art was heard in the last hour, the frame
-  shows "Birds of Today", every bird heard so far today sized by its calls. Before the
-  first bird of the morning it shows "Birds of Yesterday". This covers winter evenings,
-  the midday lull and rainy days. The day runs from `on_time` (05:00), not midnight,
-  so a 2 a.m. owl counts towards the evening before and appears in the next morning's
-  "Birds of Yesterday". Titles: `title`, `title_today`, `title_yesterday`.
-- **Scene changes:** when a bird arrives or leaves, every bird gets a fresh pose (of five),
+- **On screen:** "Birds of Today", every bird with art heard so far today, sized by its
+  calls. Birds heard in the last 60 minutes (`linger_minutes`) are drawn about three
+  times the area, so the frame still shows who is about right now. Before the first
+  bird of the morning it shows "Birds of Yesterday", so the screen is never empty.
+  The day runs from `on_time` (05:00), not midnight, so a 2 a.m. owl counts towards
+  the evening before and appears in the next morning's "Birds of Yesterday".
+- **Busy days:** at most `max_birds` (20) are drawn: the last hour's first, then the
+  most heard.
+- **Hour view** (`"main_view": "hour"`): only the last hour's birds, falling back to
+  "Birds of Today" and then "Birds of Yesterday". It was sparse in testing, especially
+  in winter, hence the change.
+- **Scene changes:** when a bird arrives, or one starts or stops being "this hour", every bird gets a fresh pose (of five),
   mirroring, size and position. These are seeded by date and the set of birds, so a given
   scene always looks the same that day.
 - **Packing:** ported from upstream's silhouette nester. Sizes come from calls^0.35 times the
@@ -188,7 +194,7 @@ journalctl -u garden-frame -n 50                   # frame log (on the frame Pi)
   background, pale outlines, between sunset and sunrise) is still there if you want it:
   set `"night_mode": true`.
 - **Redraws:** checked every 15 minutes, and the panel only redraws when the species with art,
-  or day/night mode, changes. There's also a daily redraw to keep the panel healthy.
+  the ones heard this hour, or day/night mode change. There's also a daily redraw to keep the panel healthy.
 - **If the mic Pi goes quiet:** the picture stays as it was. After 3 hours without contact the
   frame shows a small hollow circle in the corner, meaning "not live".
 - **Colour:** dithering uses Pimoroni's measured Spectra 6 colours, then maps pixels straight

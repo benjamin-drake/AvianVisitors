@@ -98,6 +98,8 @@ class Style:
     max_tile: float = 0.15      # no bird takes more than this share of the screen (few birds -> not huge)
     fill: float = 1.0           # scales upstream's area budget; >1 packs the birds larger
     size_wobble: tuple[float, float] = (0.55, 1.7)  # area multiplier per appearance: big and small birds
+    recent_boost: float = 3.0   # area multiplier for birds heard in the last hour ("today" view)
+    recent_wobble: tuple[float, float] = (0.8, 1.25)  # calmer wobble then, so the boost reads clearly
     mirror: bool = True
     outline: int = 2            # night outline, px
     day_bg: tuple = (255, 255, 255)
@@ -176,8 +178,10 @@ class Tile:
 
 
 def make_tiles(entries, library: SpriteLibrary, reg: Registry, rng: random.Random,
-               style: Style) -> list[Tile]:
-    """entries: (sci, common, count). Pose, mirroring and wobble come from rng."""
+               style: Style, highlight: frozenset = frozenset()) -> list[Tile]:
+    """entries: (sci, common, count). Pose, mirroring and wobble come from rng.
+    Species in highlight (heard in the last hour) are drawn recent_boost times the area."""
+    wobble = style.recent_wobble if highlight else style.size_wobble
     tiles = []
     # Deal poses like cards: shuffle all five, hand them out, reshuffle when the
     # deck runs out. Seven birds then share at most two poses between them.
@@ -193,7 +197,7 @@ def make_tiles(entries, library: SpriteLibrary, reg: Registry, rng: random.Rando
         flip = style.mirror and rng.random() < 0.5
         size = reg.resolve(sci, common).size
         score = (max(1, count) ** style.count_exp * size ** style.size_exp
-                 * rng.uniform(*style.size_wobble))
+                 * rng.uniform(*wobble) * (style.recent_boost if sci in highlight else 1))
         tiles.append(Tile(sci, common, count, pose, flip, poses[pose], score))
     return tiles
 
@@ -305,10 +309,10 @@ def mask_pack(tiles: list[Tile], style: Style, rng: random.Random,
 
 
 def layout(entries, library: SpriteLibrary, style: Style, seed: str,
-           reg: Registry | None = None, reserved=()) -> list[Tile]:
+           reg: Registry | None = None, reserved=(), highlight: frozenset = frozenset()) -> list[Tile]:
     """Size, pack, shrink-to-fit and centre. Returns the tiles that made it on screen."""
     reg = reg or registry()
-    tiles = make_tiles(entries, library, reg, rng_for(seed), style)
+    tiles = make_tiles(entries, library, reg, rng_for(seed), style, highlight)
     if not tiles:
         return []
     size_tiles(tiles, style)
@@ -373,19 +377,24 @@ class Frame:
     signature: str               # what the e-ink refresh rule compares
 
 
-def scene_signature(day: date, scis: Iterable[str], night: bool) -> str:
+def scene_signature(day: date, scis: Iterable[str], night: bool, highlight: Iterable[str] = ()) -> str:
     key = f"{day}|{'night' if night else 'day'}|{','.join(sorted(scis))}"
+    if highlight:
+        key += f"|now:{','.join(sorted(highlight))}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
-def render_live(entries, today: date, library: SpriteLibrary, style: Style, night: bool):
-    """entries: (sci, common, count) for every species on screen. Returns
-    (image, tiles, signature). Seeded by date + scene, so an arrival or an
-    expiry reshuffles poses and places, and nothing else does."""
+def render_live(entries, today: date, library: SpriteLibrary, style: Style, night: bool,
+                highlight: frozenset = frozenset()):
+    """entries: (sci, common, count) for every species on screen; highlight: those
+    to draw larger. Returns (image, tiles, signature). Seeded by date + scene, so an
+    arrival, an expiry or a change in the highlighted birds reshuffles poses and
+    places, and nothing else does."""
     drawable = [e for e in entries if library.drawable(e[0])]
     scis = [e[0] for e in drawable]
-    tiles = layout(drawable, library, style, f"{today}|{','.join(sorted(scis))}")
-    return render(tiles, style, night), tiles, scene_signature(today, scis, night)
+    highlight = frozenset(highlight) & frozenset(scis)
+    tiles = layout(drawable, library, style, f"{today}|{','.join(sorted(scis))}", highlight=highlight)
+    return render(tiles, style, night), tiles, scene_signature(today, scis, night, highlight)
 
 
 def render_screen(detections, now: datetime, library: SpriteLibrary, style: Style,

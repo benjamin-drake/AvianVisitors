@@ -5,11 +5,10 @@
     .venv/bin/python webframe.py --station http://birdnet # over Tailscale, away from home
     python3 webframe.py --host 0.0.0.0 --panel-hours       # always-on test server (see ops/webframe/)
 
-Every few minutes it asks the mic Pi who was heard in the last 60 minutes (the
-same API call the frame Pi makes), renders with your art from art/, and the
-page picks up the new picture. Open it in a browser and go full screen.
-Like the frame, it falls back to "Birds of Today" and then "Birds of
-Yesterday" when the last hour has no birds with art.
+Every few minutes it asks the mic Pi who was heard today and in the last 60
+minutes (the same API calls the frame Pi makes), renders with your art from
+art/, and the page picks up the new picture. Open it in a browser and go full
+screen. It follows the same views as the frame (birddisplay/scenes.py).
 
 The page shows the e-ink simulation by default; press C for the full-colour
 artwork and E to go back. It ignores the panel's on/off hours unless you pass
@@ -102,10 +101,10 @@ class Frame:
             print(f"mic Pi unreachable: {e}", flush=True)
             return
         image, tiles, sig = render_live(scene.entries, scene.day, self.library,
-                                        style_for({**self.cfg, "title": scene.title}), False)
+                                        style_for({**self.cfg, "title": scene.title}), False, scene.recent)
         sig = hold_sig if hold else f"{scene.view}|{sig}"
         name = lambda sci, common: registry().resolve(sci, common).uk_name  # noqa: E731
-        birds = [name(t.sci, t.common) for t in tiles]
+        birds = [name(t.sci, t.common) + (" (now)" if t.sci in scene.recent else "") for t in tiles]
         missing = sorted(name(s, c) for s, c, _ in scene.entries if not self.library.has(s))
         with self.lock:
             if sig != self.signature or not self.png:

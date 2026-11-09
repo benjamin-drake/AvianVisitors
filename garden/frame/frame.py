@@ -5,11 +5,11 @@
     python3 garden/frame/frame.py --force      # redraw now regardless
     python3 garden/frame/frame.py --preview    # render to /dev/shm/garden-frame/frame.png, panel untouched
 
-Each run asks the mic Pi which species were heard in the last 60 minutes
-(upstream's /avian/api/birdnet-api.php?action=recent) and shows them as
-"Birds of the Hour". If none of them has art it shows "Birds of Today"
-instead, and before the first bird of the day "Birds of Yesterday"
-(birddisplay/scenes.py). The render's signature (view, date, species) is
+Each run asks the mic Pi which species were heard today and in the last 60
+minutes (upstream's /avian/api/birdnet-api.php) and shows "Birds of Today",
+the last hour's drawn larger; before the first bird of the day it shows
+"Birds of Yesterday" (birddisplay/scenes.py; "main_view": "hour" brings back
+the original last-hour-only view). The render's signature (view, date, species) is
 compared with the last drawn one; only a change, or the daily heal,
 refreshes the panel.
 
@@ -135,7 +135,7 @@ def main() -> int:
     # Night mode (dark background, pale outlines) is off unless config turns it on.
     night = cfg["night_mode"] and is_night(station_now, cfg["latitude"], cfg["longitude"])
     image, tiles, sig = render_live(scene.entries, scene.day, library,
-                                    style_for({**cfg, "title": scene.title}), night)
+                                    style_for({**cfg, "title": scene.title}), night, scene.recent)
     sig = hold_sig if hold else f"{scene.view}|{sig}"
     if stale:
         no_signal_mark(image)

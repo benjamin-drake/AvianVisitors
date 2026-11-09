@@ -9,6 +9,8 @@
     "GB-ENG-RUT"
   ],
   "orientation": "portrait",
+  "main_view": "today",
+  "max_birds": 20,
   "title": "Birds of the Hour",
   "title_today": "Birds of Today",
   "title_yesterday": "Birds of Yesterday",
