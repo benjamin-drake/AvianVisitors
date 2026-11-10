@@ -11,6 +11,7 @@
   "orientation": "portrait",
   "main_view": "today",
   "max_birds": 20,
+  "front_on": 0.3,
   "labels": true,
   "label_font": "Caveat.ttf",
   "label_size": 24,

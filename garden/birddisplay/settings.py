@@ -25,6 +25,7 @@ DEFAULTS = {
     "heal_hours": 24,          # redraw at least this often even if nothing changed
     "main_view": "today",      # "today": the day's birds, last hour's larger; "hour": last hour only
     "max_birds": 20,           # most birds on screen: the last hour's first, then the most heard
+    "front_on": 0.3,           # how often birds face the viewer: 1 = like any pose, 0 = never
     "labels": True,            # each bird's name in small letters underneath
     "label_font": "Caveat.ttf",
     "label_size": 24,

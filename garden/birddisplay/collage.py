@@ -32,7 +32,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 from . import eink
 from .species import Registry, registry
-from .sprites import SpriteLibrary, outlined
+from .sprites import POSE_NAMES, SpriteLibrary, outlined
+
+FRONT_ON = POSE_NAMES.index("perched front-on")
 
 
 @dataclass(frozen=True)
@@ -100,6 +102,7 @@ class Style:
     size_wobble: tuple[float, float] = (0.55, 1.7)  # area multiplier per appearance: big and small birds
     recent_boost: float = 3.0   # area multiplier for birds heard in the last hour ("today" view)
     recent_wobble: tuple[float, float] = (0.8, 1.25)  # calmer wobble then, so the boost reads clearly
+    front_on: float = 0.3       # chance the front-on pose is in each deal of poses (1 = as often as the rest)
     mirror: bool = True
     outline: int = 2            # night outline, px
     day_bg: tuple = (255, 255, 255)
@@ -140,7 +143,7 @@ def with_title(style: Style) -> Style:
 def style_for(cfg: dict) -> Style:
     """The Style a config asks for: orientation plus title settings."""
     kw = {k: cfg[k] for k in ("title", "title_font", "title_size", "title_arch",
-                                  "labels", "label_font", "label_size") if k in cfg}
+                                  "labels", "label_font", "label_size", "front_on") if k in cfg}
     if cfg.get("orientation", "landscape") == "portrait":
         return portrait(**kw)
     return with_title(Style(**kw))
@@ -217,13 +220,14 @@ def make_tiles(entries, library: SpriteLibrary, reg: Registry, rng: random.Rando
     tiles = []
     # Deal poses like cards: shuffle all five, hand them out, reshuffle when the
     # deck runs out. Seven birds then share at most two poses between them.
+    # The front-on pose only joins a deck with chance front_on, so it is rarer.
     deck: list[int] = []
     for sci, common, count in entries:
         poses = library.poses(sci)
         if not poses:
             continue
         if not deck:
-            deck = list(range(5))
+            deck = [p for p in range(5) if p != FRONT_ON or rng.random() < style.front_on]
             rng.shuffle(deck)
         pose = deck.pop() % len(poses)
         flip = style.mirror and rng.random() < 0.5

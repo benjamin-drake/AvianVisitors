@@ -47,6 +47,8 @@ in flight, feeding. They can be transparent or on white.
 - `orientation`: `portrait` (784x1120, as hung) or `landscape`.
 - `main_view`: `today` (the day's birds, the last hour's drawn larger) or `hour` (the
   last hour's birds only, as first designed). `max_birds`: at most this many on screen (20).
+- `front_on`: how often a bird faces straight out (pose 2). 0.3 makes it rare, 1 as
+  common as the other poses, 0 never.
 - `labels`: each bird's UK name in small black letters under it, field-guide style
   (`label_font` Caveat, `label_size` 24; Fraunces-DisplayItalic.ttf is the tidier
   alternative). Black, not grey: the panel has no grey ink. Names are packed with their
