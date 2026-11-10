@@ -110,6 +110,10 @@ class Style:
     title_size: int = 64
     title_arch: float = 24      # degrees the title bows through; 0 = straight
     title_top: int = 26         # gap above the title, px
+    labels: bool = False        # name each bird underneath, field-guide style
+    label_font: str = "Fraunces-DisplayItalic.ttf"
+    label_size: int = 20
+    label_gap: int = 2          # px between a bird's feet and its name
 
 
 def content_box(style: Style) -> tuple[float, float, float, float]:
@@ -135,7 +139,8 @@ def with_title(style: Style) -> Style:
 
 def style_for(cfg: dict) -> Style:
     """The Style a config asks for: orientation plus title settings."""
-    kw = {k: cfg[k] for k in ("title", "title_font", "title_size", "title_arch") if k in cfg}
+    kw = {k: cfg[k] for k in ("title", "title_font", "title_size", "title_arch",
+                                  "labels", "label_font", "label_size") if k in cfg}
     if cfg.get("orientation", "landscape") == "portrait":
         return portrait(**kw)
     return with_title(Style(**kw))
@@ -160,20 +165,47 @@ class Tile:
     score: float
     w: float = 0
     h: float = 0
-    x: float = 0
+    x: float = 0                # top-left of the footprint (bird plus label)
     y: float = 0
     placed: bool = False
+    label: str = ""
+    lw: int = 0                 # label size, px (0 = no label)
+    lh: int = 0
+    gap: int = 0
+
+    @property
+    def fw(self) -> float:
+        """Footprint width: the bird, or its name if that is wider."""
+        return max(self.w, self.lw)
+
+    @property
+    def fh(self) -> float:
+        return self.h + (self.gap + self.lh if self.lh else 0)
+
+    @property
+    def bx(self) -> float:
+        """Where the bird itself sits inside the footprint (centred over its name)."""
+        return self.x + (self.fw - self.w) / 2
     _mask_key: tuple = field(default=(), repr=False)
     _mask: np.ndarray | None = field(default=None, repr=False)
 
     def mask(self, cell: int) -> np.ndarray:
-        """Silhouette on the occupancy grid at the tile's current size."""
+        """Silhouette (plus the label's box) on the occupancy grid at the tile's current size."""
         key = (round(self.w), round(self.h), cell)
         if self._mask_key != key:
             gw, gh = max(1, math.ceil(self.w / cell)), max(1, math.ceil(self.h / cell))
             a = self.sprite.getchannel("A").resize((gw, gh), Image.BOX)
             m = np.asarray(a) > 24
-            self._mask, self._mask_key = (m[:, ::-1] if self.flip else m), key
+            m = m[:, ::-1] if self.flip else m
+            if self.lh:
+                fw, fh = max(1, math.ceil(self.fw / cell)), max(1, math.ceil(self.fh / cell))
+                full = np.zeros((fh, fw), dtype=bool)
+                ox = min(fw - gw, max(0, round((self.fw - self.w) / 2 / cell)))
+                full[:gh, ox:ox + gw] = m[:fh]
+                lx, lw = round((self.fw - self.lw) / 2 / cell), math.ceil(self.lw / cell)
+                full[math.floor((self.h + self.gap) / cell):, lx:lx + lw] = True
+                m = full
+            self._mask, self._mask_key = m, key
         return self._mask
 
 
@@ -198,8 +230,18 @@ def make_tiles(entries, library: SpriteLibrary, reg: Registry, rng: random.Rando
         size = reg.resolve(sci, common).size
         score = (max(1, count) ** style.count_exp * size ** style.size_exp
                  * rng.uniform(*wobble) * (style.recent_boost if sci in highlight else 1))
-        tiles.append(Tile(sci, common, count, pose, flip, poses[pose], score))
+        tile = Tile(sci, common, count, pose, flip, poses[pose], score)
+        if style.labels:
+            tile.label = reg.resolve(sci, common).uk_name
+            l, t, r, b = _label_font(style).getbbox(tile.label)
+            tile.lw, tile.lh, tile.gap = r - l + 2, b - t + 2, style.label_gap
+        tiles.append(tile)
     return tiles
+
+
+def _label_font(style: Style):
+    from .title import load_font
+    return load_font(style.label_font, style.label_size)
 
 
 def size_tiles(tiles: list[Tile], style: Style) -> None:
@@ -260,7 +302,7 @@ def mask_pack(tiles: list[Tile], style: Style, rng: random.Random,
     xb, yb = style.ellipse
     placed: list[Tile] = []
 
-    for t in sorted(tiles, key=lambda t: -t.w * t.h):
+    for t in sorted(tiles, key=lambda t: -t.fw * t.fh):
         t.placed = False
         m = t.mask(cell)
         mh, mw = m.shape
@@ -268,11 +310,12 @@ def mask_pack(tiles: list[Tile], style: Style, rng: random.Random,
             continue
         hits = _collision_map(occ, m)
         if placed:
-            area = sum(p.w * p.h for p in placed)
-            com_x = sum((p.x + p.w / 2) * p.w * p.h for p in placed) / area
-            com_y = sum((p.y + p.h / 2) * p.w * p.h for p in placed) / area
+            area = sum(p.fw * p.fh for p in placed)
+            com_x = sum((p.x + p.fw / 2) * p.fw * p.fh for p in placed) / area
+            com_y = sum((p.y + p.fh / 2) * p.fw * p.fh for p in placed) / area
         else:
             com_x, com_y = cx, cy
+        tw, th = t.fw, t.fh
         step = max(cell, min(t.w, t.h) * 0.05)
         phase = rng.random() * 2 * math.pi
         best, best_cost, found_ring = None, math.inf, -1.0
@@ -282,16 +325,16 @@ def mask_pack(tiles: list[Tile], style: Style, rng: random.Random,
                 break
             k = np.arange(max(36, int(r / 1.6)))
             theta = phase + k / len(k) * 2 * math.pi
-            px = cx + r * xb * np.cos(theta) - t.w / 2
-            py = cy + r * yb * np.sin(theta) - t.h / 2
-            ok = (px >= lo_x) & (py >= lo_y) & (px + t.w <= hi_x) & (py + t.h <= hi_y)
+            px = cx + r * xb * np.cos(theta) - tw / 2
+            py = cy + r * yb * np.sin(theta) - th / 2
+            ok = (px >= lo_x) & (py >= lo_y) & (px + tw <= hi_x) & (py + th <= hi_y)
             gx, gy = (px // cell).astype(int), (py // cell).astype(int)
             ok &= (gx >= 0) & (gy >= 0) & (gx <= gw - mw) & (gy <= gh - mh)
             if ok.any():
                 idx = np.nonzero(ok)[0]
                 free = idx[~hits[gy[idx], gx[idx]]]
                 for i in free:
-                    cost = math.hypot((px[i] + t.w / 2 - com_x) / xb, (py[i] + t.h / 2 - com_y) / yb)
+                    cost = math.hypot((px[i] + tw / 2 - com_x) / xb, (py[i] + th / 2 - com_y) / yb)
                     cost += rng.random() * step * 0.5
                     if cost < best_cost:
                         best, best_cost = (px[i], py[i]), cost
@@ -328,8 +371,8 @@ def layout(entries, library: SpriteLibrary, style: Style, seed: str,
         # Re-centre the cluster, as upstream does. Skipped when part of the
         # canvas is reserved, so the caption corner stays clear.
         bx0, by0, bx1, by1 = content_box(style)
-        left, right = min(t.x for t in placed), max(t.x + t.w for t in placed)
-        top, bottom = min(t.y for t in placed), max(t.y + t.h for t in placed)
+        left, right = min(t.x for t in placed), max(t.x + t.fw for t in placed)
+        top, bottom = min(t.y for t in placed), max(t.y + t.fh for t in placed)
         dx = (bx0 + bx1) / 2 - (left + right) / 2
         dy = (by0 + by1) / 2 - (top + bottom) / 2
         dx = max(bx0 - left, min(bx1 - right, dx))
@@ -349,6 +392,9 @@ def render(tiles: list[Tile], style: Style, night: bool) -> Image.Image:
         draw_title(canvas, style.title, style.title_font, style.title_size, style.title_top,
                    style.title_arch, ink)
     b = style.outline + 1
+    ink = style.outline_colour if night else (0, 0, 0)
+    font = _label_font(style) if any(t.label for t in tiles) else None
+    draw = ImageDraw.Draw(canvas)
     for t in tiles:
         w, h = max(1, round(t.w)), max(1, round(t.h))
         sprite = t.sprite.resize((w, h), Image.LANCZOS)
@@ -358,9 +404,13 @@ def render(tiles: list[Tile], style: Style, night: bool) -> Image.Image:
             roomy = Image.new("RGBA", (w + 2 * b, h + 2 * b), (0, 0, 0, 0))
             roomy.paste(sprite, (b, b))
             canvas.alpha_composite(outlined(roomy, style.outline, style.outline_colour),
-                                   (round(t.x) - b, round(t.y) - b))
+                                   (round(t.bx) - b, round(t.y) - b))
         else:
-            canvas.alpha_composite(sprite, (round(t.x), round(t.y)))
+            canvas.alpha_composite(sprite, (round(t.bx), round(t.y)))
+        if t.label:
+            l, top, _, _ = font.getbbox(t.label)
+            draw.text((round(t.x + (t.fw - t.lw) / 2) - l + 1, round(t.y + t.h + t.gap) - top + 1),
+                      t.label, fill=ink, font=font)
     return canvas.convert("RGB")
 
 

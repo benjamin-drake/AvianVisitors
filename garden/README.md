@@ -47,6 +47,10 @@ in flight, feeding. They can be transparent or on white.
 - `orientation`: `portrait` (784x1120, as hung) or `landscape`.
 - `main_view`: `today` (the day's birds, the last hour's drawn larger) or `hour` (the
   last hour's birds only, as first designed). `max_birds`: at most this many on screen (20).
+- `labels`: each bird's UK name in small black letters under it, field-guide style
+  (`label_font` Caveat, `label_size` 24; Fraunces-DisplayItalic.ttf is the tidier
+  alternative). Black, not grey: the panel has no grey ink. Names are packed with their
+  birds, so they never sit on another bird; birds come out a little smaller.
 - `title_today` "Birds of Today", `title_yesterday`, and `title` "Birds of the Hour" (hour view),
   set on a gentle arch (`title_arch`, in degrees; 0 = straight).
 - `title_font`: any file in `fonts/`. Fraunces, Fraunces Italic, Instrument Serif and Caveat
