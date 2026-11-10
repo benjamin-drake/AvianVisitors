@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from PIL import ImageDraw  # noqa: E402
 
 from birddisplay import eink, scenes, settings, sources  # noqa: E402
-from birddisplay.collage import render_live, style_for  # noqa: E402
+from birddisplay.collage import live_signature, render_live, style_for  # noqa: E402
 from birddisplay.sprites import SpriteLibrary  # noqa: E402
 from birddisplay.sun import is_night  # noqa: E402
 
@@ -134,20 +134,22 @@ def main() -> int:
 
     # Night mode (dark background, pale outlines) is off unless config turns it on.
     night = cfg["night_mode"] and is_night(station_now, cfg["latitude"], cfg["longitude"])
-    image, tiles, sig = render_live(scene.entries, scene.day, library,
-                                    style_for({**cfg, "title": scene.title}), night, scene.recent)
-    sig = hold_sig if hold else f"{scene.view}|{sig}"
-    if stale:
-        no_signal_mark(image)
-        sig = "stale"
-    missing = sorted(c for s, c, _ in scene.entries if not library.has(s))
-
+    # Decide from the signature first: most runs change nothing, and laying out
+    # and drawing the birds is the slow part on a Pi Zero W.
+    sig = ("stale" if stale else hold_sig if hold else
+           f"{scene.view}|{live_signature(scene.entries, scene.day, library, night, scene.recent)}")
     heal_due = now_ts - state.get("last_refresh", 0) >= cfg["heal_hours"] * 3600
     changed = sig != state.get("signature")
-    summary = ", ".join(t.common for t in tiles) or "(no birds)"
     if not (changed or heal_due or args.force or args.preview):
-        print(f"no change: {summary}")
+        print(f"no change: {', '.join(c for s, c, _ in scene.entries if library.drawable(s)) or '(no birds)'}")
         return 0
+
+    image, tiles, _ = render_live(scene.entries, scene.day, library,
+                                  style_for({**cfg, "title": scene.title}), night, scene.recent)
+    if stale:
+        no_signal_mark(image)
+    missing = sorted(c for s, c, _ in scene.entries if not library.has(s))
+    summary = ", ".join(t.common for t in tiles) or "(no birds)"
 
     indexed = eink.quantize(image, saturation=cfg["dither_saturation"], contrast=cfg["dither_contrast"])
     eink.simulated(indexed).save(RUN / "frame.png")

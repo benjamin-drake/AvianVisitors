@@ -9,6 +9,7 @@ straight line, around 20-30 is a gentle bow, 60 or more is a strong rainbow.
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -16,11 +17,13 @@ from PIL import Image, ImageDraw, ImageFont
 FONTS = Path(__file__).resolve().parent.parent / "fonts"
 
 
+@lru_cache(maxsize=16)
 def load_font(name: str, size: int) -> ImageFont.FreeTypeFont:
     path = Path(name)
     return ImageFont.truetype(str(path if path.is_absolute() else FONTS / name), size)
 
 
+@lru_cache(maxsize=16)
 def title_height(font_name: str, size: int, text: str, width: int, arch: float) -> int:
     """Vertical space the arched title needs, so the layout can keep birds out of it."""
     font = load_font(font_name, size)

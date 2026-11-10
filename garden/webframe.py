@@ -27,7 +27,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from birddisplay import eink, scenes, settings, sources
-from birddisplay.collage import render_live, style_for
+from birddisplay.collage import live_signature, render_live, style_for
 from birddisplay.species import registry
 from birddisplay.sprites import SpriteLibrary
 
@@ -100,17 +100,22 @@ class Frame:
                 self.state = {**self.state, "error": str(e), "updated": time.strftime("%H:%M")}
             print(f"mic Pi unreachable: {e}", flush=True)
             return
-        image, tiles, sig = render_live(scene.entries, scene.day, self.library,
-                                        style_for({**self.cfg, "title": scene.title}), False, scene.recent)
-        sig = hold_sig if hold else f"{scene.view}|{sig}"
+        sig = hold_sig if hold else \
+            f"{scene.view}|{live_signature(scene.entries, scene.day, self.library, False, scene.recent)}"
         name = lambda sci, common: registry().resolve(sci, common).uk_name  # noqa: E731
-        birds = [name(t.sci, t.common) + (" (now)" if t.sci in scene.recent else "") for t in tiles]
+        birds = [name(s, c) + (" (now)" if s in scene.recent else "")
+                 for s, c, _ in scene.entries if self.library.drawable(s)]
         missing = sorted(name(s, c) for s, c, _ in scene.entries if not self.library.has(s))
+        redraw = sig != self.signature or not self.png  # only this thread writes them
+        if redraw:  # drawn outside the lock, so page requests aren't held up meanwhile
+            image, _, _ = render_live(scene.entries, scene.day, self.library,
+                                      style_for({**self.cfg, "title": scene.title}), False, scene.recent)
+            indexed = eink.quantize(image, saturation=self.cfg["dither_saturation"],
+                                    contrast=self.cfg["dither_contrast"])
+            png = {"color": encode(image), "eink": encode(eink.simulated(indexed))}
         with self.lock:
-            if sig != self.signature or not self.png:
-                indexed = eink.quantize(image, saturation=self.cfg["dither_saturation"],
-                                        contrast=self.cfg["dither_contrast"])
-                self.png = {"color": encode(image), "eink": encode(eink.simulated(indexed))}
+            if redraw:
+                self.png = png
                 self.signature = sig
                 self.state["version"] += 1
                 held = " (held overnight)" if hold else ""

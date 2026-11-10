@@ -280,11 +280,24 @@ def _dilate(m: np.ndarray, r: int) -> np.ndarray:
     return out
 
 
+def _fast_len(n: int) -> int:
+    """Smallest m >= n with no prime factor above 5: numpy's FFT is 2-5x quicker there."""
+    while True:
+        k = n
+        for p in (2, 3, 5):
+            while k % p == 0:
+                k //= p
+        if k == 1:
+            return n
+        n += 1
+
+
 def _collision_map(occ: np.ndarray, mask: np.ndarray) -> np.ndarray:
     """hits[gy, gx] is True where the mask, top-left at (gx, gy), overlaps occ."""
     gh, gw = occ.shape
     mh, mw = mask.shape
-    shape = (gh + mh, gw + mw)
+    # Any shape of at least (gh + mh - 1, gw + mw - 1) gives the same, unwrapped result.
+    shape = (_fast_len(gh + mh), _fast_len(gw + mw))
     f = np.fft.rfft2(occ.astype(np.float32), shape)
     g = np.fft.rfft2(mask[::-1, ::-1].astype(np.float32), shape)
     full = np.fft.irfft2(f * g, shape)
@@ -438,6 +451,14 @@ def scene_signature(day: date, scis: Iterable[str], night: bool, highlight: Iter
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
+def live_signature(entries, today: date, library: SpriteLibrary, night: bool,
+                   highlight: frozenset = frozenset()) -> str:
+    """What render_live would return as its signature, without the work of drawing:
+    the frame checks this first and only renders when the picture would change."""
+    scis = [e[0] for e in entries if library.drawable(e[0])]
+    return scene_signature(today, scis, night, frozenset(highlight) & frozenset(scis))
+
+
 def render_live(entries, today: date, library: SpriteLibrary, style: Style, night: bool,
                 highlight: frozenset = frozenset()):
     """entries: (sci, common, count) for every species on screen; highlight: those
@@ -448,7 +469,7 @@ def render_live(entries, today: date, library: SpriteLibrary, style: Style, nigh
     scis = [e[0] for e in drawable]
     highlight = frozenset(highlight) & frozenset(scis)
     tiles = layout(drawable, library, style, f"{today}|{','.join(sorted(scis))}", highlight=highlight)
-    return render(tiles, style, night), tiles, scene_signature(today, scis, night, highlight)
+    return render(tiles, style, night), tiles, live_signature(entries, today, library, night, highlight)
 
 
 def render_screen(detections, now: datetime, library: SpriteLibrary, style: Style,
