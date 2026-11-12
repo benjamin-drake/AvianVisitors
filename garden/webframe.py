@@ -11,7 +11,9 @@ art/, and the page picks up the new picture. Open it in a browser and go full
 screen. It follows the same views as the frame (birddisplay/scenes.py).
 
 The page shows the e-ink simulation by default; press C for the full-colour
-artwork and E to go back. It ignores the panel's on/off hours unless you pass
+artwork and E to go back. With --wall (the frame Pi's frame/serve.py, e.g.
+http://birdframe:8090) it shows the real frame's own last picture instead,
+"On the wall" (W), and whether the frame is keeping up. It ignores the panel's on/off hours unless you pass
 --panel-hours: then, like the real frame, from off_time to on_time it draws
 "Birds of Today" once and holds it.
 """
@@ -22,7 +24,8 @@ import io
 import json
 import threading
 import time
-from datetime import timedelta
+import urllib.request
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -45,26 +48,35 @@ PAGE = """<!doctype html>
 </style></head>
 <body><img id="frame" alt="Birds of the Hour"><div id="info"></div>
 <script>
-let mode = "eink", version = null;
+let mode = null, version = null;
 async function tick() {
   try {
     const s = await (await fetch("/state.json", {cache: "no-store"})).json();
+    if (mode === null) mode = s.wall ? "wall" : "eink";
+    if (mode === "wall" && !s.wall) mode = "eink";
     if (s.version !== version || document.getElementById("frame").dataset.mode !== mode) {
       version = s.version;
       const img = document.getElementById("frame");
       img.src = `/${mode}.png?v=${s.version}`;
       img.dataset.mode = mode;
     }
-    document.getElementById("info").innerHTML =
+    const w = s.wall || {};
+    const wall = mode !== "wall" ? "" :
+      `<b>On the wall</b>${w.last_redraw ? ", drawn " + w.last_redraw : ""}` +
+      (w.checked ? `<br>Frame last checked ${w.checked}${w.result ? " (" + w.result + ")" : ""}` : "") +
+      (w.error ? `<br><b>Frame:</b> ${w.error}` : "") + (w.no_signal ? "<br><b>Frame shows 'no signal'</b>" : "") + "<br><br>";
+    document.getElementById("info").innerHTML = wall +
       `<b>${s.title || "On screen"}:</b> ${s.birds.join(", ") || "no birds"}<br>` +
       (s.missing.length ? `<b>No art yet:</b> ${s.missing.join(", ")}<br>` : "") +
       `Updated ${s.updated}` + (s.hold ? " (held overnight, as the panel would)" : "") + (s.error ? `<br><b>Mic Pi unreachable:</b> ${s.error}` : "") +
-      `<br>${mode === "eink" ? "E-ink simulation (C for colour)" : "Colour artwork (E for e-ink)"}`;
+      `<br>${{eink: "E-ink simulation", color: "Colour artwork", wall: "The frame's own picture"}[mode]}` +
+      ` (${s.wall ? "W wall, " : ""}E e-ink, C colour)`;
   } catch (e) {}
 }
 document.addEventListener("keydown", e => {
   if (e.key === "c" || e.key === "C") mode = "color";
   if (e.key === "e" || e.key === "E") mode = "eink";
+  if (e.key === "w" || e.key === "W") mode = "wall";
   tick();
 });
 tick(); setInterval(tick, 30000);
@@ -75,8 +87,8 @@ tick(); setInterval(tick, 30000);
 class Frame:
     """The latest render, refreshed by a background thread."""
 
-    def __init__(self, cfg: dict, station: str, panel_hours: bool = False):
-        self.cfg, self.station, self.panel_hours = cfg, station, panel_hours
+    def __init__(self, cfg: dict, station: str, panel_hours: bool = False, wall: str | None = None):
+        self.cfg, self.station, self.panel_hours, self.wall = cfg, station, panel_hours, wall
         self.library = SpriteLibrary(Path(cfg["art_dir"]))
         self.lock = threading.Lock()
         self.signature = None
@@ -106,7 +118,7 @@ class Frame:
         birds = [name(s, c) + (" (now)" if s in scene.recent else "")
                  for s, c, _ in scene.entries if self.library.drawable(s)]
         missing = sorted(name(s, c) for s, c, _ in scene.entries if not self.library.has(s))
-        redraw = sig != self.signature or not self.png  # only this thread writes them
+        redraw = sig != self.signature or "eink" not in self.png  # only this thread writes them
         if redraw:  # drawn outside the lock, so page requests aren't held up meanwhile
             image, _, _ = render_live(scene.entries, scene.day, self.library,
                                       style_for({**self.cfg, "title": scene.title}), False, scene.recent)
@@ -115,7 +127,7 @@ class Frame:
             png = {"color": encode(image), "eink": encode(eink.simulated(indexed))}
         with self.lock:
             if redraw:
-                self.png = png
+                self.png = {**self.png, **png}  # keeps the wall picture
                 self.signature = sig
                 self.state["version"] += 1
                 held = " (held overnight)" if hold else ""
@@ -123,10 +135,47 @@ class Frame:
             self.state.update(hold=hold, title=scene.title, birds=birds, missing=missing,
                               updated=f"{now:%H:%M}", error="")
 
+    def refresh_wall(self) -> None:
+        """The real frame's last picture and status, from its frame/serve.py."""
+        if not self.wall:
+            return
+        try:
+            status = json.loads(fetch(f"{self.wall}/status.json"))
+            picture = None
+            if not self.png.get("wall") or status.get("last_redraw") != self.state.get("wall", {}).get("_drawn_at"):
+                picture = fetch(f"{self.wall}/wall.png", limit=8_000_000)
+            info = {"_drawn_at": status.get("last_redraw"), "last_redraw": _hhmm(status.get("last_redraw")),
+                    "checked": _hhmm(status.get("checked")), "result": status.get("result", ""),
+                    "no_signal": status.get("no_signal", False), "error": status.get("error", "")}
+        except Exception as e:  # frame offline, rebooting, out of wifi range...
+            with self.lock:
+                self.state["wall"] = {**self.state.get("wall", {}), "error": f"unreachable ({e})"}
+            return
+        with self.lock:
+            if picture:
+                self.png["wall"] = picture
+                self.state["version"] += 1
+            self.state["wall"] = info
+
     def loop(self, every: int) -> None:
         while True:
             time.sleep(every)
             self.refresh()
+            self.refresh_wall()
+
+
+def fetch(url: str, limit: int = 100_000, timeout: float = 20) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "garden-webframe/1"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read(limit)
+
+
+def _hhmm(iso: str | None) -> str:
+    """'2026-11-12T20:15:00' -> '20:15', or '12 Nov 20:15' if not today."""
+    if not iso:
+        return ""
+    t = datetime.fromisoformat(iso)
+    return f"{t:%H:%M}" if t.date() == datetime.now().date() else f"{t:%-d %b %H:%M}"
 
 
 def encode(img) -> bytes:
@@ -144,7 +193,7 @@ def handler(frame: Frame):
                     body, kind = PAGE.encode(), "text/html; charset=utf-8"
                 elif path == "/state.json":
                     body, kind = json.dumps(frame.state).encode(), "application/json"
-                elif path in ("/eink.png", "/color.png") and frame.png:
+                elif path in ("/eink.png", "/color.png", "/wall.png") and frame.png.get(path[1:-4]):
                     body, kind = frame.png[path[1:-4]], "image/png"
                 else:
                     self.send_error(404)
@@ -170,10 +219,12 @@ def main() -> None:
     ap.add_argument("--panel-hours", action="store_true",
                     help="hold 'Birds of Today' overnight, as the panel does")
     ap.add_argument("--every", type=int, default=120, help="seconds between checks (default %(default)s)")
+    ap.add_argument("--wall", help="the frame Pi's picture server, e.g. http://birdframe:8090")
     args = ap.parse_args()
 
-    frame = Frame(settings.load(), args.station, args.panel_hours)
+    frame = Frame(settings.load(), args.station, args.panel_hours, (args.wall or "").rstrip("/") or None)
     frame.refresh()
+    frame.refresh_wall()
     threading.Thread(target=frame.loop, args=(args.every,), daemon=True).start()
     print(f"Web frame: http://{args.host}:{args.port}  (Ctrl-C to stop)", flush=True)
     ThreadingHTTPServer((args.host, args.port), handler(frame)).serve_forever()

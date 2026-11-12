@@ -19,6 +19,10 @@ shows "Birds of Today" once and holds it until on_time.
 If the mic Pi can't be reached the panel keeps its last picture; after 3
 hours without contact a small "no signal" mark is drawn so it's clear the
 frame isn't live. Logs: journalctl -u garden-frame
+
+After each redraw the picture on the wall is kept in ~/garden-data/wall.png
+(it survives a reboot), and every run writes /dev/shm/garden-frame/status.json.
+frame/serve.py shares just those two, so the web frame can show the real wall.
 """
 from __future__ import annotations
 
@@ -74,6 +78,12 @@ def push(indexed, rotate: int, fake: bool = False) -> None:
         epd.close()
 
 
+def write_status(**status) -> None:
+    """What this run did, for frame/serve.py. RAM only: rewritten every run."""
+    status["checked"] = datetime.now().isoformat(timespec="seconds")
+    save_state(RUN / "status.json", status)
+
+
 def no_signal_mark(img) -> None:
     """A small hollow circle in the corner: 'not live'."""
     d = ImageDraw.Draw(img)
@@ -113,6 +123,7 @@ def main() -> int:
     hold_sig = f"hold|{scenes.bird_day_start(datetime.now(), cfg['on_time']).date()}"
     if hold and state.get("signature") == hold_sig:
         print(f"off hours: holding the day's birds until {cfg['on_time']}")
+        write_status(result=f"holding overnight until {cfg['on_time']}", **_times(state))
         return 0
 
     try:
@@ -127,6 +138,7 @@ def main() -> int:
         if since < STALE_AFTER or state.get("stale_drawn"):
             print("keeping the current picture")
             save_state(state_path, state)
+            write_status(result="mic Pi unreachable", error=str(e), **_times(state))
             return 0
         print(f"no contact for {since / 3600:.1f} h: marking the frame as not live")
         station_now, stale = datetime.now(), True
@@ -142,6 +154,7 @@ def main() -> int:
     changed = sig != state.get("signature")
     if not (changed or heal_due or args.force or args.preview):
         print(f"no change: {', '.join(c for s, c, _ in scene.entries if library.drawable(s)) or '(no birds)'}")
+        write_status(result="no change", **_times(state))
         return 0
 
     image, tiles, _ = render_live(scene.entries, scene.day, library,
@@ -152,7 +165,8 @@ def main() -> int:
     summary = ", ".join(t.common for t in tiles) or "(no birds)"
 
     indexed = eink.quantize(image, saturation=cfg["dither_saturation"], contrast=cfg["dither_contrast"])
-    eink.simulated(indexed).save(RUN / "frame.png")
+    on_wall = eink.simulated(indexed)
+    on_wall.save(RUN / "frame.png")
     print(f"{scene.title}{' (night style)' if night else ''}: {summary}"
           + (f"; no art yet: {', '.join(missing)}" if missing else ""))
     if args.preview:
@@ -164,11 +178,23 @@ def main() -> int:
         push(indexed, cfg["rotate"], args.fake_panel)
     except Exception as e:
         print(f"panel update failed: {e}", file=sys.stderr)
+        write_status(result="panel update failed", error=str(e), **_times(state))
         return 1  # state untouched, so the next run tries again
     print(f"panel updated in {time.monotonic() - t0:.0f}s ({'changed' if changed else 'forced' if args.force else 'daily heal'})")
     state.update(signature=sig, last_refresh=now_ts, stale_drawn=stale)
     save_state(state_path, state)
+    # A few small writes a day; kept on the card so the web frame still has it after a reboot.
+    tmp = data / "wall.tmp.png"
+    on_wall.save(tmp)
+    os.replace(tmp, data / "wall.png")
+    write_status(result="redrawn", **_times(state))
     return 0
+
+
+def _times(state: dict) -> dict:
+    iso = lambda k: datetime.fromtimestamp(state[k]).isoformat(timespec="seconds") if k in state else None  # noqa: E731
+    return {"last_redraw": iso("last_refresh"), "last_contact": iso("last_contact"),
+            "no_signal": bool(state.get("stale_drawn"))}
 
 
 if __name__ == "__main__":

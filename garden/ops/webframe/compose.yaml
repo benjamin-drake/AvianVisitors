@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     environment:
       STATION: http://100.104.175.7   # the mic Pi over Tailscale: works at home and once it's at the farm
+      WALL: http://100.66.12.9:8090   # the frame Pi's own picture (frame/serve.py), also over Tailscale
     volumes:
       - ./garden:/app:ro
     ports:

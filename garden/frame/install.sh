@@ -43,6 +43,15 @@ else
 fi
 sudo usermod -aG spi,gpio "$USER"
 
+# systemd-logind deletes a user's files in /dev/shm when they log out. The
+# frame keeps its latest render, status and lock (and lgpio its pipes) there.
+if [ ! -f /etc/systemd/logind.conf.d/garden.conf ]; then
+  sudo mkdir -p /etc/systemd/logind.conf.d
+  printf '[Login]\nRemoveIPC=no\n' | sudo tee /etc/systemd/logind.conf.d/garden.conf >/dev/null
+  reboot_needed=true
+  echo "  kept /dev/shm across logouts (RemoveIPC=no; takes effect after a reboot)"
+fi
+
 say "3/5 Fewer SD card writes"
 "$GARDEN/ops/low-writes.sh" 256
 
@@ -58,7 +67,7 @@ if ! ls "$GARDEN"/art/*/pose_1.png >/dev/null 2>&1; then
   echo "  no bird art yet: from the Mac run garden/ops/push-art.sh"
 fi
 
-say "5/5 Timer"
+say "5/5 Timer and wall-picture server"
 sudo tee /etc/systemd/system/garden-frame.service >/dev/null <<EOF
 [Unit]
 Description=Garden birds e-ink frame
@@ -87,8 +96,28 @@ AccuracySec=30s
 [Install]
 WantedBy=timers.target
 EOF
+# Shares the wall picture and the last run's status on port 8090 (frame/serve.py),
+# so the web frame at home can show exactly what's on the wall.
+sudo tee /etc/systemd/system/garden-frame-web.service >/dev/null <<EOF
+[Unit]
+Description=Garden birds frame: share the wall picture (port 8090)
+After=network.target
+
+[Service]
+User=$USER
+ExecStart=/usr/bin/python3 $GARDEN/frame/serve.py
+Restart=always
+RestartSec=30
+Nice=10
+MemoryMax=40M
+
+[Install]
+WantedBy=multi-user.target
+EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now garden-frame.timer >/dev/null
+sudo systemctl enable garden-frame-web.service >/dev/null
+sudo systemctl restart garden-frame-web.service
 # (not piped into head: under pipefail its SIGPIPE ended the script here)
 systemctl list-timers garden-frame.timer --no-pager --no-legend || true
 

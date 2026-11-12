@@ -64,6 +64,9 @@ in flight, feeding. They can be transparent or on white.
 (press C for colour, E for the e-ink simulation). Away from home use `--station http://birdnet`.
 For an always-on copy, `ops/webframe/deploy.sh` runs it in Docker on the home server
 (<http://linuxserver.tail8c80fe.ts.net:8765>), following the panel's hours. Re-run it after new art.
+With `WALL` set in `ops/webframe/compose.yaml` it opens on **On the wall** (W): the real frame's
+own last picture, fetched over Tailscale from the frame Pi's `frame/serve.py` (port 8090), with
+when it was drawn and when the frame last checked in.
 
 `mockup.py` draws every species you've drawn, once each, under each title font, and saves
 `out/mockup/fonts.png` to compare them. Change the arrangement with `--seed 2`.
@@ -159,7 +162,7 @@ If it's mounted upside down, set `"rotate": 180` in `~/garden-data/config.json`.
 ```bash
 ssh you@birdnet   ~/garden/garden/ops/health.sh    # mic, analysis backlog, today's count
 ssh you@birdframe ~/garden/garden/ops/health.sh    # last redraw, last contact with the mic
-scp you@birdframe:/dev/shm/garden-frame/frame.png .   # what's on the wall right now
+curl -O http://birdframe:8090/wall.png               # what's on the wall right now (or the web frame's W view)
 ssh you@birdframe '~/garden/garden/.venv/bin/python ~/garden/garden/frame/frame.py --force'
 journalctl -u garden-frame -n 50                   # frame log (on the frame Pi)
 ```
