@@ -68,6 +68,10 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=$USER
+# lgpio makes its notify pipes in the working directory; / isn't writable,
+# and without them gpiozero falls back to a pin factory that fails on the panel.
+WorkingDirectory=/dev/shm
+Environment=LG_WD=/dev/shm
 ExecStart=$GARDEN/.venv/bin/python $GARDEN/frame/frame.py
 TimeoutStartSec=5min
 EOF
@@ -85,7 +89,8 @@ WantedBy=timers.target
 EOF
 sudo systemctl daemon-reload
 sudo systemctl enable --now garden-frame.timer >/dev/null
-systemctl list-timers garden-frame.timer --no-pager | head -2
+# (not piped into head: under pipefail its SIGPIPE ended the script here)
+systemctl list-timers garden-frame.timer --no-pager --no-legend || true
 
 say "Done"
 if $reboot_needed; then
