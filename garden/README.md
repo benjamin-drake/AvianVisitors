@@ -157,6 +157,29 @@ If it's mounted upside down, set `"rotate": 180` in `~/garden-data/config.json`.
 - In the Tailscale admin console, **Disable key expiry** on both machines.
 - Run `ops/health.sh` on both and check power shows "ok". The 3B needs a proper 2.5 A supply.
 
+### 5. The frame's printed back
+
+`enclosure/back.py` models the back that holds the panel in the wooden frame and carries the
+boards (`pip install manifold3d numpy matplotlib`, then `python enclosure/back.py --preview`;
+STLs and pictures land in `out/enclosure/`). Every measurement is a setting at the top.
+
+- **Wooden frame:** cut the rebate opening **160.9 x 212.8 mm** (the panel, 1 mm all round,
+  plus 4 mm on the ribbon side for its bend). The back's flange overlaps the frame by 14 mm
+  and screws on with 8 small countersunk wood screws (No.4 / 3 mm x 12 mm), so it lifts off.
+- **Stack in the rebate, front to back:** glass (optional), your mount, the panel, then the
+  back's 2.5 mm plug pressing it all forward. Make the rebate deep enough for the first three
+  plus the plug, or change `PLUG_T`; a thin foam sheet takes up any slack.
+- **Ribbon:** the panel's ribbon leaves its left edge (seen from the front). It bends
+  back behind the panel, never towards the front, into the adapter board. The adapter is
+  screwed into the window with its connectors facing the panel (4 x M2 x 6 mm screws, no longer, from
+  outside, nuts on the panel side). Its slotted holes allow 3 mm of adjustment.
+- **Boards:** the HAT and the Pi Zero go on 6 mm posts (M2.5 self-tapping x 6 mm, or heat-set
+  inserts with `PILOT = 3.5`). This Zero's header is on its underside, so mount it logo side
+  up, SD card at the bottom. The power cable presses into the channel down to the bottom edge.
+- **Stand:** the 103 mm leg slides into the angled socket. The frame then leans back 15°.
+- **Printing:** the back prints panel-face down with no supports. On the H2C it fits in one piece.
+  Use wood PLA with 3 walls and 15% infill; the leg is better at 100% infill or in plain PLA.
+
 ## Looking after it from Newcastle
 
 ```bash
