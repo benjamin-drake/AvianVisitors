@@ -32,7 +32,7 @@ def _shade(tris, light=(-0.4, -0.5, 1.0), base=(0.73, 0.55, 0.35)):
     return np.clip(np.outer(k, base), 0, 1)
 
 
-def render(back_m, leg_m, L, out: Path) -> None:
+def render(back_m, leg_m, L, out: Path, cover_m=None) -> None:
     # 1. From behind, with the boards and the panel outline (mirrored: as seen from the back).
     fig, ax = plt.subplots(figsize=(7, 8.6))
     tris = _tris(back_m)
@@ -53,6 +53,9 @@ def render(back_m, leg_m, L, out: Path) -> None:
             (L["ad_cx"], L["ad_cy"], B.ADAPTER, "adapter", "#c0392b")):
         ax.add_patch(Rectangle((mx(cx + w / 2), cy - h / 2), w, h, alpha=0.35, color=col))
         ax.text(mx(cx), cy, label, ha="center", va="center", rotation=90, fontsize=8, color="k")
+    cx0, cy0, cx1, cy1 = L["cover_out"]
+    ax.add_patch(Rectangle((mx(cx1), cy0), cx1 - cx0, cy1 - cy0, fill=False, lw=1.5, ec="k", ls=":"))
+    ax.text(mx(cx0) - 2, cy1 + 2, "cover slides down onto the rails", ha="right", fontsize=8)
     ox0, oy0, ox1, oy1 = L["outer"]
     ax.set_xlim(mx(ox1) - 8, mx(ox0) + 8)
     ax.set_ylim(oy0 - 8, oy1 + 8)
@@ -95,14 +98,17 @@ def render(back_m, leg_m, L, out: Path) -> None:
     fig.savefig(out / "preview_side.png", dpi=130)
     plt.close(fig)
 
-    # 3. 3D view of the back and the leg.
+    # 3. 3D view of the back, the leg, and the cover lifted off above its rails.
     fig = plt.figure(figsize=(8, 7))
     ax = fig.add_subplot(projection="3d")
-    for m, off, base in ((back_m, (0, 0, 0), (0.73, 0.55, 0.35)), (leg_m, (L["outer"][2] + 25, 0, 0), (0.6, 0.42, 0.25))):
+    parts = [(back_m, (0, 0, 0), (0.73, 0.55, 0.35)), (leg_m, (L["outer"][2] + 25, 0, 0), (0.6, 0.42, 0.25))]
+    if cover_m is not None:
+        parts.append((cover_m, (0, 95, 0), (0.80, 0.62, 0.40)))
+    for m, off, base in parts:
         tr = _tris(m) * np.array([-1, 1, 1]) + np.array([-off[0], off[1], off[2]])
         ax.add_collection3d(Poly3DCollection(tr, facecolors=_shade(tr, base=base), edgecolors="none"))
     ax.set_xlim(-L["outer"][2] - 140, -L["outer"][0] + 5)
-    ax.set_ylim(L["outer"][1] - 5, L["outer"][3] + 5)
+    ax.set_ylim(L["outer"][1] - 5, L["outer"][3] + 40)
     ax.set_zlim(-60, 140)
     ax.set_box_aspect((1.6, 1.2, 0.95))
     ax.view_init(elev=32, azim=-115)
@@ -110,4 +116,21 @@ def render(back_m, leg_m, L, out: Path) -> None:
     fig.tight_layout()
     fig.savefig(out / "preview_3d.png", dpi=130)
     plt.close(fig)
+    # 4. Section across the cover and its rails, at the middle of the boards.
+    if cover_m is not None:
+        fig, ax = plt.subplots(figsize=(8, 3.2))
+        y = L["ad_cy"] + 2
+        for m, col in ((back_m, "#7a5a3a"), (cover_m, "#d9a066")):
+            cs = m.translate([0, -y, 0]).rotate([-90, 0, 0]).slice(0.0)
+            for poly in cs.to_polygons():
+                poly = np.asarray(poly)
+                ax.fill(-poly[:, 0], poly[:, 1], color=col, ec="k", lw=0.4)
+        cx0, _, cx1, _ = L["cover_out"]
+        ax.set_xlim(-cx1 - 12, -cx0 + 12)
+        ax.set_ylim(-1, B.PLUG_T + B.PLATE_T + B.COVER_DEPTH + 4)
+        ax.set_aspect("equal")
+        ax.set_title("Across the cover (seen from below): the angled edges sit under the rails", fontsize=9)
+        fig.tight_layout()
+        fig.savefig(out / "preview_cover_section.png", dpi=130)
+        plt.close(fig)
     print(f"previews -> {out}/preview_*.png")

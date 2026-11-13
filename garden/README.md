@@ -161,7 +161,7 @@ If it's mounted upside down, set `"rotate": 180` in `~/garden-data/config.json`.
 
 `enclosure/back.py` models the back that holds the panel in the wooden frame and carries the
 boards (`pip install manifold3d numpy matplotlib`, then `python enclosure/back.py --preview`;
-STLs and pictures land in `out/enclosure/`). Every measurement is a setting at the top.
+STLs (`frame_back`, `frame_cover`, `frame_stand_leg`) and pictures land in `out/enclosure/`). Every measurement is a setting at the top.
 
 - **Wooden frame:** cut the rebate opening **160.9 x 212.8 mm** (the panel, 1 mm all round,
   plus 4 mm on the ribbon side for its bend). The back's flange overlaps the frame by 14 mm
@@ -173,12 +173,17 @@ STLs and pictures land in `out/enclosure/`). Every measurement is a setting at t
   back behind the panel, never towards the front, into the adapter board. The adapter is
   screwed into the window with its connectors facing the panel (4 x M2 x 6 mm screws, no longer, from
   outside, nuts on the panel side). Its slotted holes allow 3 mm of adjustment.
-- **Boards:** the HAT and the Pi Zero go on 6 mm posts (M2.5 self-tapping x 6 mm, or heat-set
-  inserts with `PILOT = 3.5`). This Zero's header is on its underside, so mount it logo side
-  up, SD card at the bottom. The power cable presses into the channel down to the bottom edge.
+- **Boards:** adapter, HAT and Pi Zero sit in one row so one cover goes over them. The HAT is on
+  10 mm posts (its unused 40-pin socket hangs underneath), the Zero on 8 mm posts. Use M2.5
+  self-tapping x 6 mm screws, or heat-set inserts with `PILOT = 3.5`. This Zero's header is on its
+  underside, so mount it logo side up, header towards the HAT, SD card at the bottom.
+- **Cover (screwless):** it slides down from above onto two 45-degree rails, stops on the end caps
+  and clicks past a low bump at the top. To take it off, push up on the thumb ridge. The power
+  cable leaves through a notch in its bottom wall, then presses into the channel to the bottom edge.
 - **Stand:** the 103 mm leg slides into the angled socket. The frame then leans back 15°.
 - **Printing:** the back prints panel-face down with no supports. On the H2C it fits in one piece.
-  Use wood PLA with 3 walls and 15% infill; the leg is better at 100% infill or in plain PLA.
+  The cover prints face down (its angled edges are 45 degrees, so no supports either). Use wood PLA
+  with 3 walls and 15% infill; the leg is better at 100% infill or in plain PLA.
 
 ## Looking after it from Newcastle
 

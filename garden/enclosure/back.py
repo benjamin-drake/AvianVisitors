@@ -62,15 +62,28 @@ ADAPTER_PCB_Z = 2.9                 # board's back face sits here; connectors fa
 M2_CLEAR = 2.4                      # M2 x 6 mm MAX: tab 2 + board 1.6 + nut 1.6; longer pokes at the panel
 
 # --- Boards on the back -------------------------------------------------------------
-STANDOFF_H, STANDOFF_D, PILOT = 6.0, 6.0, 2.2   # pilot for M2.5 self-tapping screws (or heat-set: 3.5)
+STANDOFF_D, PILOT = 6.0, 2.2        # pilot for M2.5 self-tapping screws (or heat-set: 3.5)
+HAT_POST = 10.0                     # the HAT's 40-pin socket hangs underneath (unused, ~8.5 mm)
+ZERO_POST = 8.0                     # room under the Zero for its ports and the power plug
+BOARD_GAP = 14.0                    # HAT to Zero: the 9-wire cable runs across here
 HAT = (30.5, 65.0)                  # rotated: its ribbon connector faces the adapter window
 HAT_HOLES = (23.0, 58.0)
-ZERO = (30.0, 65.0)                 # Pi Zero, upright, ports facing the frame's edge
+ZERO = (30.0, 65.0)                 # Pi Zero, upright, ports facing away from the HAT
 ZERO_HOLES = (23.0, 58.0)
 # This Zero's header is soldered on the underside, so it mounts LOGO SIDE UP (pins up for
-# the jumper wires), SD card at the BOTTOM, ports facing the edge. PWR IN is 54 mm from
-# the SD end, i.e. 11 mm from the top of the board.
+# the jumper wires, header towards the HAT), SD card at the BOTTOM, ports facing away from
+# the HAT. PWR IN is 54 mm from the SD end, i.e. 11 mm from the top of the board.
 ZERO_PWR_FROM_TOP = 11.0
+
+# --- Slide-on cover over the boards ------------------------------------------------
+COVER_WALL = 2.0
+COVER_DEPTH = 32.0                  # outside height above the back; ~30 mm inside for the jumper wires
+COVER_MARGIN = 5.0                  # room round the boards and the adapter window
+PLUG_ROOM = 20.0                    # beside the Zero's ports, for the power plug to turn down
+DOVE_F, DOVE_T = 4.0, 2.5           # the cover's 45-degree edge: 4 mm out at the back, 2.5 mm tall
+DOVE_CLEAR = 0.3
+RAIL_W = 3.0
+CATCH_H = 0.4                       # a low bump the cover clicks past at the top of its travel
 
 # --- Stand --------------------------------------------------------------------------
 LEAN = 15.0                         # frame leans back this far from vertical
@@ -103,14 +116,36 @@ def cyl(x, y, z, h, r, r2=None) -> Manifold:
     return Manifold.cylinder(h, r, r if r2 is None else r2, SEG).translate([x, y, z])
 
 
-def standoffs(cx, cy, sx, sy, z) -> tuple[Manifold, Manifold]:
+def standoffs(cx, cy, sx, sy, z, h) -> tuple[Manifold, Manifold]:
     """Four posts on a sx x sy hole pattern centred at (cx, cy); returns (posts, pilot holes)."""
     posts, holes = Manifold(), Manifold()
     for dx in (-sx / 2, sx / 2):
         for dy in (-sy / 2, sy / 2):
-            posts += cyl(cx + dx, cy + dy, z, STANDOFF_H, STANDOFF_D / 2)
-            holes += cyl(cx + dx, cy + dy, z - 1, STANDOFF_H + 2, PILOT / 2)
+            posts += cyl(cx + dx, cy + dy, z, h, STANDOFF_D / 2)
+            holes += cyl(cx + dx, cy + dy, z - 1, h + 2, PILOT / 2)
     return posts, holes
+
+
+def along_y(points, y0, y1) -> Manifold:
+    """Extrude a profile drawn in (x, z) along y, from y0 to y1."""
+    from manifold3d import CrossSection
+    area = sum(x0 * z1 - x1 * z0 for (x0, z0), (x1, z1) in zip(points, points[1:] + points[:1]))
+    if area < 0:                                               # clockwise reads as a hole
+        points = points[::-1]
+    prof = Manifold.extrude(CrossSection([points]), y1 - y0)   # profile in XY, length along +Z
+    return prof.rotate([90, 0, 0]).translate([0, y1, 0])       # (X, Y, Z) -> (X, -Z, Y), then shift
+
+
+def dovetail_profiles(L, zt):
+    """(x, z) profiles of the cover's two angled edges and the back's two rails."""
+    cx0, _, cx1, _ = L["cover_out"]
+    F, T, c, R = DOVE_F, DOVE_T, DOVE_CLEAR, RAIL_W
+    edge_l = [(cx0 + 0.5, zt), (cx0 - F, zt), (cx0 - F + T, zt + T), (cx0 + 0.5, zt + T)]
+    rail_l = [(cx0 - F - c - R, zt - 0.01), (cx0 - F - c, zt - 0.01), (cx0 - F + T - c, zt + T),
+              (cx0 - F - c - R, zt + T)]
+    mirror = lambda pts, about: [(2 * about - x, z) for x, z in reversed(pts)]  # noqa: E731
+    mid = (cx0 + cx1) / 2
+    return edge_l, mirror(edge_l, mid), rail_l, mirror(rail_l, mid)
 
 
 def layout() -> dict:
@@ -127,12 +162,22 @@ def layout() -> dict:
     hat_cy = ad_cy
     ox0, oy0 = -FLANGE, -FLANGE
     ox1, oy1 = REBATE_W + FLANGE, REBATE_H + FLANGE
-    zero_cx = (ox1 - 26 - ZERO[0] / 2) if FPC_ON_LEFT else (ox0 + 26 + ZERO[0] / 2)
-    zero_cy = oy0 + 28 + ZERO[1] / 2
+    # All three boards in one row, so one cover goes over them: adapter, HAT, Zero.
+    zero_cx = hat_cx + inward * (HAT[0] / 2 + BOARD_GAP + ZERO[0] / 2)
+    zero_cy = ad_cy
+    win_half = (ADAPTER[0] + 2 * ADAPTER_SLOT + 1.0) / 2
+    xa = ad_cx - inward * (win_half + COVER_MARGIN)                  # inside of the cover, ribbon side
+    xb = zero_cx + inward * (ZERO[0] / 2 + PLUG_ROOM)                # inside, beyond the Zero's ports
+    half_h = max(ADAPTER[1] + 1.0, HAT[1], ZERO[1]) / 2
+    cover_in = (min(xa, xb), ad_cy - half_h - COVER_MARGIN, max(xa, xb), ad_cy + half_h + COVER_MARGIN)
+    w = COVER_WALL
+    cover_out = (cover_in[0] - w, cover_in[1] - w, cover_in[2] + w, cover_in[3] + w)
+    cable_x = zero_cx + inward * (ZERO[0] / 2 + PLUG_ROOM / 2)       # power cable leaves the cover here
     return dict(px0=px0, py0=py0, top=top, edge_x=edge_x, inward=inward,
                 ad_cx=ad_cx, ad_cy=ad_cy, hat_cx=hat_cx, hat_cy=hat_cy,
                 zero_cx=zero_cx, zero_cy=zero_cy, outer=(ox0, oy0, ox1, oy1),
-                socket=((ox0 + ox1) / 2, oy0 + SOCKET_Y))
+                socket=((ox0 + ox1) / 2, oy0 + SOCKET_Y),
+                cover_in=cover_in, cover_out=cover_out, cable_x=cable_x)
 
 
 def back() -> Manifold:
@@ -169,21 +214,31 @@ def back() -> Manifold:
     # The white ribbon leaves the window between the adapter's edge and the window's side.
 
     # HAT and Pi Zero standoffs on the outer face.
-    for (cx, cy, (hxs, hys)) in ((L["hat_cx"], L["hat_cy"], HAT_HOLES), (L["zero_cx"], L["zero_cy"], ZERO_HOLES)):
-        posts, holes = standoffs(cx, cy, hxs, hys, zt - 0.01)
+    for (cx, cy, (hxs, hys), h) in ((L["hat_cx"], L["hat_cy"], HAT_HOLES, HAT_POST),
+                                    (L["zero_cx"], L["zero_cy"], ZERO_HOLES, ZERO_POST)):
+        posts, holes = standoffs(cx, cy, hxs, hys, zt - 0.01, h)
         body = body + posts - holes
 
-    # Power: the cable from PWR IN runs down a channel to a notch in the bottom edge.
-    pwr_y = L["zero_cy"] + ZERO[1] / 2 - ZERO_PWR_FROM_TOP
-    side = 1 if FPC_ON_LEFT else -1
-    port_x = L["zero_cx"] + side * (ZERO[0] / 2 + 3)
-    ch_x = port_x + side * 9
+    # Power: the cable leaves the cover through a notch in its bottom wall, then presses
+    # into a channel down to the plate's bottom edge.
+    ch_x, ch_top = L["cable_x"], L["cover_out"][1] - 3
     gap = 4.6                                     # micro-USB cables are ~3-3.5 mm: press in
     for sgn in (-1, 1):
         wx = ch_x + sgn * (gap / 2 + 1)
-        body += box(wx - 1, oy0, zt - 0.01, wx + 1, pwr_y + 2, zt + 5.5)
+        body += box(wx - 1, oy0, zt - 0.01, wx + 1, ch_top, zt + 5.5)
         lip_x = ch_x + sgn * gap / 2
-        body += box(min(lip_x, lip_x - sgn * 0.8), oy0, zt + 4.5, max(lip_x, lip_x - sgn * 0.8), pwr_y + 2, zt + 5.5)
+        body += box(min(lip_x, lip_x - sgn * 0.8), oy0, zt + 4.5, max(lip_x, lip_x - sgn * 0.8), ch_top, zt + 5.5)
+
+    # Rails for the slide-on cover: it drops in from above, stops at the bottom caps and
+    # clicks past a low bump at the top.
+    _, _, rail_l, rail_r = dovetail_profiles(L, zt)
+    cx0, cy0, cx1, cy1 = L["cover_out"]
+    for rail, sgn, cx in ((rail_l, -1, cx0), (rail_r, 1, cx1)):
+        body += along_y(rail, cy0 - 2.3, cy1)
+        outer = cx + sgn * (DOVE_F + DOVE_CLEAR + RAIL_W)
+        body += box(min(cx - sgn * 2, outer), cy0 - 2.3, zt - 0.01, max(cx - sgn * 2, outer), cy0 - 0.3, zt + DOVE_T)
+        lo, hi = sorted((cx + sgn * 1.0, cx + sgn * (DOVE_F - 0.5)))
+        body += box(lo, cy1 + 0.4, zt - 0.01, hi, cy1 + 1.4, zt + CATCH_H)
 
     # Stand socket: a block with a slot angled LEG_ANGLE from the surface, opening downwards.
     sx, sy = L["socket"]
@@ -247,6 +302,30 @@ def leg() -> tuple[Manifold, float]:
     return body, length
 
 
+def cover() -> Manifold:
+    """The slide-on cover, in place over the boards (model coordinates)."""
+    L = layout()
+    zt = PLUG_T + PLATE_T
+    w = COVER_WALL
+    x0, y0, x1, y1 = L["cover_out"]
+    shell = rounded_box(x0, y0, zt, x1, y1, zt + COVER_DEPTH, 2.0)
+    shell -= box(x0 + w, y0 + w, zt - 1, x1 - w, y1 - w, zt + COVER_DEPTH - w)
+    edge_l, edge_r, _, _ = dovetail_profiles(L, zt)
+    shell += along_y(edge_l, y0, y1) + along_y(edge_r, y0, y1)
+    # Notch for the power cable in the bottom wall.
+    shell -= box(L["cable_x"] - 3.0, y0 - 1, zt - 1, L["cable_x"] + 3.0, y0 + w + 1, zt + 7)
+    # Vents: a row of slots near the top and the bottom of the face (warm air rises).
+    span = x1 - x0 - 24
+    n = max(3, int(span // 18))
+    for row_y in (y0 + 8, y1 - 10):
+        for i in range(n):
+            sx = x0 + 12 + span * (i + 0.5) / n
+            shell -= box(sx - 6, row_y, zt + COVER_DEPTH - w - 1, sx + 6, row_y + 2, zt + COVER_DEPTH + 1)
+    # A thumb ridge across the top, to push it up and off.
+    shell += box(x0 + 15, y1 - 5, zt + COVER_DEPTH - 0.01, x1 - 15, y1 - 3, zt + COVER_DEPTH + 1.5)
+    return shell
+
+
 def write_stl(m: Manifold, path: Path) -> None:
     mesh = m.to_mesh()
     v = np.asarray(mesh.vert_properties)[:, :3]
@@ -275,15 +354,22 @@ def main() -> None:
     # slicer shows it the way round you'll see it from behind.
     write_stl(b.mirror([1, 0, 0]), args.out / "frame_back.stl")
     write_stl(lg, args.out / "frame_stand_leg.stl")
+    cv = cover()
+    # Printed upside down: its face on the bed, angled edges at the top (45 degrees, no supports).
+    flipped = cv.mirror([1, 0, 0]).rotate([180, 0, 0])
+    write_stl(flipped.translate([0, 0, -flipped.bounding_box()[2]]), args.out / "frame_cover.stl")
     ox0, oy0, ox1, oy1 = L["outer"]
     bb = b.bounding_box()
     print(f"back: {ox1 - ox0:.1f} x {oy1 - oy0:.1f} mm outside, {bb[5] - bb[2]:.1f} mm deep at the stand socket")
     print(f"rebate to cut in the wooden frame: {REBATE_W:.1f} x {REBATE_H:.1f} mm (panel + {FIT} mm each side + {BEND} mm for the ribbon)")
     print(f"leg: {length:.0f} x {LEG_W:.0f} x {LEG_T:.0f} mm; volume back {b.volume() / 1000:.0f} cm3, leg {lg.volume() / 1000:.0f} cm3")
+    cx0, cy0, cx1, cy1 = L["cover_out"]
+    print(f"cover: {cx1 - cx0:.0f} x {cy1 - cy0:.0f} x {COVER_DEPTH:.0f} mm, {cv.volume() / 1000:.0f} cm3; "
+          f"overlaps back: {(b ^ cv).volume():.2f} mm3 (should be 0)")
     print(f"-> {args.out}")
     if args.preview:
         from preview_back import render  # noqa: E402  (enclosure/preview_back.py)
-        render(b, lg, L, args.out)
+        render(b, lg, L, args.out, cv)
 
 
 if __name__ == "__main__":
