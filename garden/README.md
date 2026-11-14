@@ -175,15 +175,18 @@ STLs (`frame_back`, `frame_cover`, `frame_stand_leg`) and pictures land in `out/
   outside, nuts on the panel side). Its slotted holes allow 3 mm of adjustment. The channel behind
   the panel is 3.5 mm deep (`RIBBON_ROOM`) so the ribbon's U-turn isn't too sharp, and the window
   is cut for a 53 mm board (51 mm measured, +2 mm after the test print).
-- **Boards:** adapter, HAT and Pi Zero sit in one row so one cover goes over them. The HAT is on
-  10 mm posts (its unused 40-pin socket hangs underneath), the Zero on 8 mm posts. Use M2.5
-  self-tapping x 6 mm screws, or heat-set inserts with `PILOT = 3.5`. This Zero's header is on its
-  underside, so mount it logo side up, header towards the HAT, SD card at the bottom.
+- **Boards:** adapter, HAT and Pi Zero sit under one cover. The HAT stands upright on 10 mm
+  posts (its unused 40-pin socket hangs underneath). The Zero **lies on its side** on 8 mm posts
+  beside the HAT's lower half. Seen from behind: logo side up, SD-card end towards the HAT, header
+  along its top edge, micro-USB ports along its bottom edge pointing down. The official power
+  plug then goes straight down out of the cover, with no bend. Use M2.5 self-tapping x 6 mm
+  screws, or heat-set inserts with `PILOT = 3.5`.
 - **Cover (screwless):** it's open at the bottom end. It slides down from above onto two 45-degree
   rails, over the boards, and rests against a fixed end wall on the back; its own weight keeps it
   there. To take it off, push up on the grip grooves near its top.
   It's 38 mm deep (36 mm inside), so the Dupont sockets on the Zero's upright pins have room for the wires to bend. The power
-  cable leaves through a notch in the end wall, then presses into the channel to the bottom edge.
+  plug goes out through the opening in the end wall; below the plug the cable presses into
+  the channel down to the bottom edge (sized by `CABLE_D`, 4.2 mm: measure yours).
 - **Stand (three angles):** the 93 mm leg slides into the angled socket and an **M3 x 30 screw**
   goes in through the hole in the socket's back face, through one of the leg's three holes, and
   bites in the plastic below. Leg hole nearest its top end: leans back 10°; middle: 15°; far: 20°

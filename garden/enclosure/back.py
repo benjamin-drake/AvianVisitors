@@ -66,22 +66,29 @@ M2_CLEAR = 2.4                      # M2 x 6 mm MAX: tab 2 + board 1.6 + nut 1.6
 STANDOFF_D, PILOT = 6.0, 2.2        # pilot for M2.5 self-tapping screws (or heat-set: 3.5)
 HAT_POST = 10.0                     # the HAT's 40-pin socket hangs underneath (unused, ~8.5 mm)
 ZERO_POST = 8.0                     # room under the Zero for its ports and the power plug
-BOARD_GAP = 14.0                    # HAT to Zero: the 9-wire cable runs across here
+HAT_GAP = 9.0                       # adapter window to the HAT (the white ribbon loops across; was 12)
+BOARD_GAP = 9.0                     # HAT to Zero (the Zero's SD card end, which sticks out ~2 mm)
 HAT = (30.5, 65.0)                  # rotated: its ribbon connector faces the adapter window
 HAT_HOLES = (23.0, 58.0)
-ZERO = (30.0, 65.0)                 # Pi Zero, upright, ports facing away from the HAT
-ZERO_HOLES = (23.0, 58.0)
-# This Zero's header is soldered on the underside, so it mounts LOGO SIDE UP (pins up for
-# the jumper wires, header towards the HAT), SD card at the BOTTOM, ports facing away from
-# the HAT. PWR IN is 54 mm from the SD end, i.e. 11 mm from the top of the board.
-ZERO_PWR_FROM_TOP = 11.0
+ZERO = (65.0, 30.0)                 # Pi Zero LYING DOWN beside the HAT's lower half, ports DOWN
+ZERO_HOLES = (58.0, 23.0)
+# This Zero's header is soldered on the underside, so it mounts LOGO SIDE UP (pins up for the
+# jumper wires), header along its top edge, ports along its bottom edge pointing down, SD card
+# end towards the HAT. The power plug then goes straight down through the cover's end wall into
+# the channel: no bend (the official cable's plug is ~33 mm of stiff moulding).
+ZERO_PWR_FROM_SD = 54.0             # PWR IN micro-USB, centre, from the SD-card end
+ZERO_ABOVE_FLOOR = 1.0              # Zero's bottom edge above the cover's inside bottom edge
+PLUG = (14.0, 14.0)                 # opening in the end wall for the plug's moulding, w x h above the back
+PLUG_LEN = 36.0                     # port to where the cable is free to go into the channel
+CABLE_D = 4.2                       # power cable diameter: the channel is this + 0.6 wide, its lips leave
+                                    # this - 0.4 open, so it presses in and stays
 
 # --- Slide-on cover over the boards ------------------------------------------------
 COVER_WALL = 2.0
 COVER_DEPTH = 38.0                  # outside height above the back. The Zero's Dupont sockets top out
                                     # ~26 mm above the back; 36 mm inside leaves room for the wires to bend
 COVER_MARGIN = 5.0                  # room round the boards and the adapter window
-PLUG_ROOM = 20.0                    # beside the Zero's ports, for the power plug to turn down
+COVER_END_ROOM = 3.0                # inside the cover beyond the Zero's far end
 DOVE_F, DOVE_T = 4.0, 2.5           # the cover's 45-degree edge: 4 mm out at the back, 2.5 mm tall
 DOVE_CLEAR = 0.3
 RAIL_W = 3.0
@@ -164,21 +171,22 @@ def layout() -> dict:
     ad_cy = top - FPC_TAIL_CENTRE
     ad_x0 = edge_x + inward * ADAPTER_FROM_EDGE
     ad_cx = ad_x0 + inward * ADAPTER[0] / 2
-    hat_cx = ad_cx + inward * (ADAPTER[0] / 2 + ADAPTER_SLOT + 12 + HAT[0] / 2)
+    hat_cx = ad_cx + inward * (ADAPTER[0] / 2 + ADAPTER_SLOT + HAT_GAP + HAT[0] / 2)
     hat_cy = ad_cy
     ox0, oy0 = -FLANGE, -FLANGE
     ox1, oy1 = REBATE_W + FLANGE, REBATE_H + FLANGE
-    # All three boards in one row, so one cover goes over them: adapter, HAT, Zero.
+    # One row under one cover: adapter, HAT, then the Zero lying down by the HAT's lower half.
     zero_cx = hat_cx + inward * (HAT[0] / 2 + BOARD_GAP + ZERO[0] / 2)
-    zero_cy = ad_cy
     win_half = (ADAPTER[0] + 2 * ADAPTER_SLOT + 1.0) / 2
     xa = ad_cx - inward * (win_half + COVER_MARGIN)                  # inside of the cover, ribbon side
-    xb = zero_cx + inward * (ZERO[0] / 2 + PLUG_ROOM)                # inside, beyond the Zero's ports
-    half_h = max(ADAPTER[1] + 1.0, HAT[1], ZERO[1]) / 2
+    xb = zero_cx + inward * (ZERO[0] / 2 + COVER_END_ROOM)           # inside, beyond the Zero's far end
+    half_h = max(ADAPTER[1] + 1.0, HAT[1]) / 2
     cover_in = (min(xa, xb), ad_cy - half_h - COVER_MARGIN, max(xa, xb), ad_cy + half_h + COVER_MARGIN)
+    zero_cy = cover_in[1] + ZERO_ABOVE_FLOOR + ZERO[1] / 2
     w = COVER_WALL
     cover_out = (cover_in[0] - w, cover_in[1] - w, cover_in[2] + w, cover_in[3] + w)
-    cable_x = zero_cx + inward * (ZERO[0] / 2 + PLUG_ROOM / 2)       # power cable leaves the cover here
+    sd_end = zero_cx - inward * ZERO[0] / 2
+    cable_x = sd_end + inward * ZERO_PWR_FROM_SD                     # power plug, straight down
     return dict(px0=px0, py0=py0, top=top, edge_x=edge_x, inward=inward,
                 ad_cx=ad_cx, ad_cy=ad_cy, hat_cx=hat_cx, hat_cy=hat_cy,
                 zero_cx=zero_cx, zero_cy=zero_cy, outer=(ox0, oy0, ox1, oy1),
@@ -226,15 +234,18 @@ def back() -> Manifold:
         posts, holes = standoffs(cx, cy, hxs, hys, zt - 0.01, h)
         body = body + posts - holes
 
-    # Power: the cable leaves the cover through a notch in its bottom wall, then presses
-    # into a channel down to the plate's bottom edge.
-    ch_x, ch_top = L["cable_x"], L["cover_out"][1] - 3
-    gap = 4.6                                     # micro-USB cables are ~3-3.5 mm: press in
+    # Power: the plug goes straight down out of the cover's end wall; below the plug the cable
+    # presses into a channel down to the plate's bottom edge.
+    port_y = L["zero_cy"] - ZERO[1] / 2
+    ch_x, ch_top = L["cable_x"], port_y - PLUG_LEN
+    gap = CABLE_D + 0.6
+    lip = 0.5                                     # each side: leaves CABLE_D - 0.4 open
+    hgt = CABLE_D + 1.5
     for sgn in (-1, 1):
         wx = ch_x + sgn * (gap / 2 + 1)
-        body += box(wx - 1, oy0, zt - 0.01, wx + 1, ch_top, zt + 5.5)
+        body += box(wx - 1, oy0, zt - 0.01, wx + 1, ch_top, zt + hgt)
         lip_x = ch_x + sgn * gap / 2
-        body += box(min(lip_x, lip_x - sgn * 0.8), oy0, zt + 4.5, max(lip_x, lip_x - sgn * 0.8), ch_top, zt + 5.5)
+        body += box(min(lip_x, lip_x - sgn * lip), oy0, zt + hgt - 1, max(lip_x, lip_x - sgn * lip), ch_top, zt + hgt)
 
     # Rails for the slide-on cover: it drops in from above and rests on the end wall; its own
     # weight keeps it there (no catch: anything on the rails would drag along the whole slide).
@@ -248,7 +259,7 @@ def back() -> Manifold:
     # Fixed end wall: the cover's open bottom closes against it. The power cable leaves
     # through a notch in it.
     end = box(cx0, cy0 - END_WALL - 0.3, zt - 0.01, cx1, cy0 - 0.3, zt + COVER_DEPTH)
-    end -= box(L["cable_x"] - 3.0, cy0 - END_WALL - 1, zt - 1, L["cable_x"] + 3.0, cy0 + 1, zt + 7)
+    end -= box(L["cable_x"] - PLUG[0] / 2, cy0 - END_WALL - 1, zt - 1, L["cable_x"] + PLUG[0] / 2, cy0 + 1, zt + PLUG[1])
     body += end
 
     # Stand socket: a block with a slot angled LEG_ANGLE from the surface, opening downwards.
@@ -296,7 +307,12 @@ def screw_points(L) -> list[tuple[float, float]]:
     ox0, oy0, ox1, oy1 = L["outer"]
     m = FLANGE / 2
     xs, ys = (ox0 + m, (ox0 + ox1) / 2, ox1 - m), (oy0 + m, (oy0 + oy1) / 2, oy1 - m)
-    return [(x, y) for x in xs for y in ys if not (x == xs[1] and y == ys[1])]
+    pts = [(x, y) for x in xs for y in ys if not (x == xs[1] and y == ys[1])]
+    # A side screw that would sit under the cover's rails moves down below the cover.
+    cx0, cy0, cx1, cy1 = L["cover_out"]
+    reach = DOVE_F + DOVE_CLEAR + RAIL_W + SCREW_HEAD / 2 + 1
+    return [(x, cy0 - 14 if (cx0 - reach < x < cx1 + reach and cy0 - 4 < y < cy1 + 4) else y)
+            for x, y in pts]
 
 
 def reach(lean: float) -> float:
