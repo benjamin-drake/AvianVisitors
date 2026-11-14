@@ -172,17 +172,21 @@ STLs (`frame_back`, `frame_cover`, `frame_stand_leg`) and pictures land in `out/
 - **Ribbon:** the panel's ribbon leaves its left edge (seen from the front). It bends
   back behind the panel, never towards the front, into the adapter board. The adapter is
   screwed into the window with its connectors facing the panel (4 x M2 x 6 mm screws, no longer, from
-  outside, nuts on the panel side). Its slotted holes allow 3 mm of adjustment.
+  outside, nuts on the panel side). Its slotted holes allow 3 mm of adjustment. The channel behind
+  the panel is 3.5 mm deep (`RIBBON_ROOM`) so the ribbon's U-turn isn't too sharp, and the window
+  is cut for a 53 mm board (51 mm measured, +2 mm after the test print).
 - **Boards:** adapter, HAT and Pi Zero sit in one row so one cover goes over them. The HAT is on
   10 mm posts (its unused 40-pin socket hangs underneath), the Zero on 8 mm posts. Use M2.5
   self-tapping x 6 mm screws, or heat-set inserts with `PILOT = 3.5`. This Zero's header is on its
   underside, so mount it logo side up, header towards the HAT, SD card at the bottom.
 - **Cover (screwless):** it slides down from above onto two 45-degree rails, stops on the end caps
-  and clicks past a low bump at the top. To take it off, push up on the thumb ridge. The power
+  and clicks past a low bump at the top. To take it off, push up on the grip grooves near its top.
+  It's 38 mm deep (36 mm inside), so the Dupont sockets on the Zero's upright pins have room for the wires to bend. The power
   cable leaves through a notch in its bottom wall, then presses into the channel to the bottom edge.
 - **Stand:** the 103 mm leg slides into the angled socket. The frame then leans back 15°.
-- **Printing:** the back prints panel-face down with no supports. On the H2C it fits in one piece.
-  The cover prints face down (its angled edges are 45 degrees, so no supports either). Use wood PLA
+- **Printing:** the back prints panel-face down; the flange round the plug overhangs it, so
+  it needs supports under the flange (tree supports, touching the bed only). On the H2C it fits in one piece.
+  The cover prints face down with no supports (its angled edges are 45 degrees all the way to the wall). Use wood PLA
   with 3 walls and 15% infill; the leg is better at 100% infill or in plain PLA.
 
 ## Looking after it from Newcastle

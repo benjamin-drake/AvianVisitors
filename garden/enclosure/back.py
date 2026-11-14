@@ -54,11 +54,12 @@ PLATE_T = 4.0                       # flange/plate thickness
 CORNER_R = 4.0
 
 # --- Adapter board (panel ribbon -> white ribbon) -----------------------------------------
-ADAPTER = (21.0, 51.0)              # x, y (long side vertical, along the panel edge)
+ADAPTER = (21.0, 53.0)              # x, y (long side vertical); 51 measured, +2 so it drops in (test print)
 ADAPTER_HOLES = (17.5, 45.0)
 ADAPTER_FROM_EDGE = 17.0            # its board edge, mm in from the panel's ribbon edge
 ADAPTER_SLOT = 3.0                  # holes are slots, +-3 mm in x, to fine-tune on assembly
-ADAPTER_PCB_Z = 2.9                 # board's back face sits here; connectors face the panel
+RIBBON_ROOM = 3.5                   # depth behind the panel for the ribbon's U-turn (was 2.0: too sharp)
+ADAPTER_PCB_Z = RIBBON_ROOM + 0.9   # board's back face sits here; connectors face the panel
 M2_CLEAR = 2.4                      # M2 x 6 mm MAX: tab 2 + board 1.6 + nut 1.6; longer pokes at the panel
 
 # --- Boards on the back -------------------------------------------------------------
@@ -77,7 +78,8 @@ ZERO_PWR_FROM_TOP = 11.0
 
 # --- Slide-on cover over the boards ------------------------------------------------
 COVER_WALL = 2.0
-COVER_DEPTH = 32.0                  # outside height above the back; ~30 mm inside for the jumper wires
+COVER_DEPTH = 38.0                  # outside height above the back. The Zero's Dupont sockets top out
+                                    # ~26 mm above the back; 36 mm inside leaves room for the wires to bend
 COVER_MARGIN = 5.0                  # room round the boards and the adapter window
 PLUG_ROOM = 20.0                    # beside the Zero's ports, for the power plug to turn down
 DOVE_F, DOVE_T = 4.0, 2.5           # the cover's 45-degree edge: 4 mm out at the back, 2.5 mm tall
@@ -140,7 +142,8 @@ def dovetail_profiles(L, zt):
     """(x, z) profiles of the cover's two angled edges and the back's two rails."""
     cx0, _, cx1, _ = L["cover_out"]
     F, T, c, R = DOVE_F, DOVE_T, DOVE_CLEAR, RAIL_W
-    edge_l = [(cx0 + 0.5, zt), (cx0 - F, zt), (cx0 - F + T, zt + T), (cx0 + 0.5, zt + T)]
+    # 45-degree all the way to the wall (no flat ledge), so it prints upside down unsupported.
+    edge_l = [(cx0 + 0.5, zt), (cx0 - F, zt), (cx0 - F + T, zt + T), (cx0, zt + F), (cx0 + 0.5, zt + F)]
     rail_l = [(cx0 - F - c - R, zt - 0.01), (cx0 - F - c, zt - 0.01), (cx0 - F + T - c, zt + T),
               (cx0 - F - c - R, zt + T)]
     mirror = lambda pts, about: [(2 * about - x, z) for x, z in reversed(pts)]  # noqa: E731
@@ -193,23 +196,24 @@ def back() -> Manifold:
     ex, inward = L["edge_x"], L["inward"]
     rx0, rx1 = sorted((ex - inward * (BEND + FIT + 1), L["ad_cx"]))
     r_y0, r_y1 = L["top"] - FPC_ROOT[1] - 3, L["top"] - FPC_ROOT[0] + 3
-    body -= box(rx0, r_y0, -1, rx1, r_y1, 2.0)   # 2 mm of room behind the panel for the ribbon
+    body -= box(rx0, r_y0, -1, rx1, r_y1, RIBBON_ROOM)   # room behind the panel for the ribbon
 
     # Adapter window, with tabs at its four holes (slotted for fine adjustment).
     ax, ay = L["ad_cx"], L["ad_cy"]
     aw, ah = ADAPTER[0] + 2 * ADAPTER_SLOT + 1.0, ADAPTER[1] + 1.0
     body -= box(ax - aw / 2, ay - ah / 2, -1, ax + aw / 2, ay + ah / 2, zt + 1)
     tab_z0 = ADAPTER_PCB_Z + 1.6
+    tab_z1 = max(zt, tab_z0 + 2.0)   # tabs 2 mm thick; they stand proud of the back if need be
     hx, hy = ADAPTER_HOLES[0] / 2, ADAPTER_HOLES[1] / 2
     for sx in (-1, 1):
         for sy in (-1, 1):
             cx, cy = ax + sx * hx, ay + sy * hy
-            tab = box(cx - 4.5 - ADAPTER_SLOT, cy - 4.0, tab_z0, cx + 4.5 + ADAPTER_SLOT, cy + 4.0, zt)
-            tab -= box(cx - ADAPTER_SLOT, cy - M2_CLEAR / 2, tab_z0 - 1, cx + ADAPTER_SLOT, cy + M2_CLEAR / 2, zt + 1)
+            tab = box(cx - 4.5 - ADAPTER_SLOT, cy - 4.0, tab_z0, cx + 4.5 + ADAPTER_SLOT, cy + 4.0, tab_z1)
+            tab -= box(cx - ADAPTER_SLOT, cy - M2_CLEAR / 2, tab_z0 - 1, cx + ADAPTER_SLOT, cy + M2_CLEAR / 2, tab_z1 + 1)
             for ex_ in (-ADAPTER_SLOT, ADAPTER_SLOT):
-                tab -= cyl(cx + ex_, cy, tab_z0 - 1, zt - tab_z0 + 2, M2_CLEAR / 2)
+                tab -= cyl(cx + ex_, cy, tab_z0 - 1, tab_z1 - tab_z0 + 2, M2_CLEAR / 2)
             # keep the tab inside the window's outline (it's the window's own ledge)
-            tab ^= box(ax - aw / 2, ay - ah / 2, tab_z0, ax + aw / 2, ay + ah / 2, zt)
+            tab ^= box(ax - aw / 2, ay - ah / 2, tab_z0, ax + aw / 2, ay + ah / 2, tab_z1)
             body += tab
     # The white ribbon leaves the window between the adapter's edge and the window's side.
 
@@ -321,8 +325,10 @@ def cover() -> Manifold:
         for i in range(n):
             sx = x0 + 12 + span * (i + 0.5) / n
             shell -= box(sx - 6, row_y, zt + COVER_DEPTH - w - 1, sx + 6, row_y + 2, zt + COVER_DEPTH + 1)
-    # A thumb ridge across the top, to push it up and off.
-    shell += box(x0 + 15, y1 - 5, zt + COVER_DEPTH - 0.01, x1 - 15, y1 - 3, zt + COVER_DEPTH + 1.5)
+    # Thumb grip near the top: three shallow grooves cut into the face (a raised ridge
+    # would need supports, as the face prints on the bed).
+    for gy in (y1 - 22, y1 - 19, y1 - 16):
+        shell -= box(x0 + 20, gy, zt + COVER_DEPTH - 0.8, x1 - 20, gy + 1.5, zt + COVER_DEPTH + 1)
     return shell
 
 
