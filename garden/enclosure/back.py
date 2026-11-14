@@ -85,13 +85,16 @@ PLUG_ROOM = 20.0                    # beside the Zero's ports, for the power plu
 DOVE_F, DOVE_T = 4.0, 2.5           # the cover's 45-degree edge: 4 mm out at the back, 2.5 mm tall
 DOVE_CLEAR = 0.3
 RAIL_W = 3.0
-CATCH_H = 0.4                       # a low bump the cover clicks past at the top of its travel
+END_WALL = 2.4                      # fixed wall on the back that closes the cover's open bottom
 
 # --- Stand --------------------------------------------------------------------------
-LEAN = 15.0                         # frame leans back this far from vertical
+LEANS = (10.0, 15.0, 20.0)          # the three lean settings, degrees back from vertical
+LEAN = 15.0                         # the one drawn in the side preview
 LEG_ANGLE = 45.0                    # leg's angle from the back's surface
 LEG_W, LEG_T = 40.0, 6.0
-LEG_SOCKET_DEPTH = 22.0
+LEG_SOCKET_DEPTH = 38.0             # slot length; the leg goes in 20-37 mm depending on the setting
+PIN_FROM_MOUTH = 10.0               # the pin crosses the slot this far in from its mouth
+PIN_CLEAR, PIN_PILOT = 3.3, 2.6     # M3 x 30 screw: clear through the roof and the leg, bites below
 LEG_CLEAR = 0.35
 SOCKET_Y = 70.0                     # socket centre, mm above the plate's bottom edge
 FRAME_BELOW = 15.0                  # wooden frame's bottom edge (on the table) below the plate's bottom edge
@@ -233,16 +236,20 @@ def back() -> Manifold:
         lip_x = ch_x + sgn * gap / 2
         body += box(min(lip_x, lip_x - sgn * 0.8), oy0, zt + 4.5, max(lip_x, lip_x - sgn * 0.8), ch_top, zt + 5.5)
 
-    # Rails for the slide-on cover: it drops in from above, stops at the bottom caps and
-    # clicks past a low bump at the top.
+    # Rails for the slide-on cover: it drops in from above and rests on the end wall; its own
+    # weight keeps it there (no catch: anything on the rails would drag along the whole slide).
     _, _, rail_l, rail_r = dovetail_profiles(L, zt)
     cx0, cy0, cx1, cy1 = L["cover_out"]
     for rail, sgn, cx in ((rail_l, -1, cx0), (rail_r, 1, cx1)):
         body += along_y(rail, cy0 - 2.3, cy1)
         outer = cx + sgn * (DOVE_F + DOVE_CLEAR + RAIL_W)
         body += box(min(cx - sgn * 2, outer), cy0 - 2.3, zt - 0.01, max(cx - sgn * 2, outer), cy0 - 0.3, zt + DOVE_T)
-        lo, hi = sorted((cx + sgn * 1.0, cx + sgn * (DOVE_F - 0.5)))
-        body += box(lo, cy1 + 0.4, zt - 0.01, hi, cy1 + 1.4, zt + CATCH_H)
+
+    # Fixed end wall: the cover's open bottom closes against it. The power cable leaves
+    # through a notch in it.
+    end = box(cx0, cy0 - END_WALL - 0.3, zt - 0.01, cx1, cy0 - 0.3, zt + COVER_DEPTH)
+    end -= box(L["cable_x"] - 3.0, cy0 - END_WALL - 1, zt - 1, L["cable_x"] + 3.0, cy0 + 1, zt + 7)
+    body += end
 
     # Stand socket: a block with a slot angled LEG_ANGLE from the surface, opening downwards.
     sx, sy = L["socket"]
@@ -252,7 +259,15 @@ def back() -> Manifold:
     slot = box(-(LEG_W / 2 + LEG_CLEAR), -(LEG_T / 2 + LEG_CLEAR), 0,
                LEG_W / 2 + LEG_CLEAR, LEG_T / 2 + LEG_CLEAR, 120)
     slot = slot.rotate([90 - LEG_ANGLE, 0, 0]).translate([sx, S["start"][0], S["start"][1]])
-    body += block - slot
+    # Pin across the slot, square to the leg: M3 screw in from the block's outside.
+    n = (math.sin(math.radians(LEG_ANGLE)), math.cos(math.radians(LEG_ANGLE)))   # (y, z), up and out
+    P = S["pin"]
+    def along_n(r, t0, t1):  # cylinder on the pin's axis, from t0 to t1 mm along n
+        c = Manifold.cylinder(t1 - t0, r, r, SEG)       # along +z
+        c = c.translate([0, 0, t0]).rotate([-LEG_ANGLE, 0, 0])   # +z -> n
+        return c.translate([sx, P[0], P[1]])
+    pin = along_n(PIN_CLEAR / 2, -(LEG_T / 2 + LEG_CLEAR) + 0.01, 60) + along_n(PIN_PILOT / 2, -12, 1)
+    body += block - slot - pin
 
     # Countersunk screw holes in the flange.
     for (x, y) in screw_points(L):
@@ -270,10 +285,11 @@ def socket_geometry(L) -> dict:
     half = LEG_T / 2 + LEG_CLEAR
     start = (L["socket"][1] + 10, zt + 2 + half * math.cos(a))   # near wall clears the plate by ~2 mm
     mouth = (start[0] + LEG_SOCKET_DEPTH * d[0], start[1] + LEG_SOCKET_DEPTH * d[1])
+    pin = (mouth[0] - PIN_FROM_MOUTH * d[0], mouth[1] - PIN_FROM_MOUTH * d[1])
     blk_d = mouth[1] - zt                                         # the slot opens through the block's back face
     blk_y1 = start[0] + half * math.sin(a) + 4                    # 4 mm of roof above the blind end
     blk_y0 = mouth[0] - half * math.sin(a) - 1
-    return dict(start=start, mouth=mouth, blk_d=blk_d, blk_y0=blk_y0, blk_y1=blk_y1, d=d)
+    return dict(start=start, mouth=mouth, pin=pin, blk_d=blk_d, blk_y0=blk_y0, blk_y1=blk_y1, d=d)
 
 
 def screw_points(L) -> list[tuple[float, float]]:
@@ -283,25 +299,39 @@ def screw_points(L) -> list[tuple[float, float]]:
     return [(x, y) for x in xs for y in ys if not (x == xs[1] and y == ys[1])]
 
 
-def leg() -> tuple[Manifold, float]:
-    """The stand's leg, printed flat. Its foot is cut level with the table."""
+def reach(lean: float) -> float:
+    """Distance from the socket's mouth to the tip of the (rounded) foot, along the leg,
+    for the frame to lean back `lean` degrees."""
     L = layout()
-    t, a = math.radians(LEAN), math.radians(LEG_ANGLE)
-    # Height of the socket mouth above the table, then the leg length down to it.
+    t, a = math.radians(lean), math.radians(LEG_ANGLE)
     S = socket_geometry(L)
-    y_mouth = S["mouth"][0] - L["outer"][1] + FRAME_BELOW
-    z_mouth = S["mouth"][1]
-    v = y_mouth * math.cos(t) - z_mouth * math.sin(t)
-    reach = v / math.cos(a - t)
-    length = reach + LEG_SOCKET_DEPTH
+    y = S["mouth"][0] - L["outer"][1] + FRAME_BELOW      # mouth, along the back from the table
+    z = S["mouth"][1]
+    v = y * math.cos(t) - z * math.sin(t)                # mouth's height above the table
+    r = LEG_T / 2                                        # the foot is a half-round: works at any lean
+    return (v - r) / math.cos(a - t) + r
+
+
+def leg_settings() -> tuple[float, list[tuple[float, float, float]]]:
+    """(leg length, [(lean, how far it goes in, hole's distance from the leg's top end)])."""
+    reaches = [reach(t) for t in LEANS]
+    length = min(reaches) + LEG_SOCKET_DEPTH - 1.0       # deepest setting stops 1 mm short of the end
+    rows = [(t, length - r, length - r - PIN_FROM_MOUTH) for t, r in zip(LEANS, reaches)]
+    return length, rows
+
+
+def leg() -> tuple[Manifold, float]:
+    """The stand's leg, printed flat: a half-round foot and one hole per lean setting."""
+    length, rows = leg_settings()
     w, th = LEG_W, LEG_T
-    # Profile in (x along leg, y across thickness), foot bevel = angle between leg and table.
-    foot = math.radians(90) - (a - t)
-    cut = th * math.tan(foot)
-    pts = [(0, 0), (length, 0), (length - cut, th), (0, th)] if cut < length else [(0, 0), (length, 0), (0, th)]
+    r = th / 2
+    arc = [(length - r + r * math.sin(u), r - r * math.cos(u))
+           for u in np.linspace(0, math.pi, 13)]
+    pts = [(0, 0)] + arc + [(0, th)]
     from manifold3d import CrossSection
-    prof = CrossSection([pts])
-    body = Manifold.extrude(prof, w)                      # x: length, y: thickness, z: width
+    body = Manifold.extrude(CrossSection([pts]), w)       # x: length, y: thickness, z: width
+    for _, _, hole in rows:
+        body -= Manifold.cylinder(th + 2, PIN_CLEAR / 2, PIN_CLEAR / 2, SEG).rotate([-90, 0, 0]).translate([hole, -1, w / 2])
     body = body.rotate([90, 0, 0])                        # lay it flat: thickness up
     return body, length
 
@@ -313,11 +343,11 @@ def cover() -> Manifold:
     w = COVER_WALL
     x0, y0, x1, y1 = L["cover_out"]
     shell = rounded_box(x0, y0, zt, x1, y1, zt + COVER_DEPTH, 2.0)
-    shell -= box(x0 + w, y0 + w, zt - 1, x1 - w, y1 - w, zt + COVER_DEPTH - w)
+    # Open at the bottom: that end leads as it slides down over the boards, and it closes
+    # against a fixed wall on the back.
+    shell -= box(x0 + w, y0 - 1, zt - 1, x1 - w, y1 - w, zt + COVER_DEPTH - w)
     edge_l, edge_r, _, _ = dovetail_profiles(L, zt)
     shell += along_y(edge_l, y0, y1) + along_y(edge_r, y0, y1)
-    # Notch for the power cable in the bottom wall.
-    shell -= box(L["cable_x"] - 3.0, y0 - 1, zt - 1, L["cable_x"] + 3.0, y0 + w + 1, zt + 7)
     # Vents: a row of slots near the top and the bottom of the face (warm air rises).
     span = x1 - x0 - 24
     n = max(3, int(span // 18))
@@ -369,6 +399,8 @@ def main() -> None:
     print(f"back: {ox1 - ox0:.1f} x {oy1 - oy0:.1f} mm outside, {bb[5] - bb[2]:.1f} mm deep at the stand socket")
     print(f"rebate to cut in the wooden frame: {REBATE_W:.1f} x {REBATE_H:.1f} mm (panel + {FIT} mm each side + {BEND} mm for the ribbon)")
     print(f"leg: {length:.0f} x {LEG_W:.0f} x {LEG_T:.0f} mm; volume back {b.volume() / 1000:.0f} cm3, leg {lg.volume() / 1000:.0f} cm3")
+    for lean, ins, hole in leg_settings()[1]:
+        print(f"  lean {lean:.0f} deg: leg {ins:.1f} mm into the socket, pin through the hole {hole:.1f} mm from its top")
     cx0, cy0, cx1, cy1 = L["cover_out"]
     print(f"cover: {cx1 - cx0:.0f} x {cy1 - cy0:.0f} x {COVER_DEPTH:.0f} mm, {cv.volume() / 1000:.0f} cm3; "
           f"overlaps back: {(b ^ cv).volume():.2f} mm3 (should be 0)")

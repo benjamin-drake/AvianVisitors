@@ -179,11 +179,15 @@ STLs (`frame_back`, `frame_cover`, `frame_stand_leg`) and pictures land in `out/
   10 mm posts (its unused 40-pin socket hangs underneath), the Zero on 8 mm posts. Use M2.5
   self-tapping x 6 mm screws, or heat-set inserts with `PILOT = 3.5`. This Zero's header is on its
   underside, so mount it logo side up, header towards the HAT, SD card at the bottom.
-- **Cover (screwless):** it slides down from above onto two 45-degree rails, stops on the end caps
-  and clicks past a low bump at the top. To take it off, push up on the grip grooves near its top.
+- **Cover (screwless):** it's open at the bottom end. It slides down from above onto two 45-degree
+  rails, over the boards, and rests against a fixed end wall on the back; its own weight keeps it
+  there. To take it off, push up on the grip grooves near its top.
   It's 38 mm deep (36 mm inside), so the Dupont sockets on the Zero's upright pins have room for the wires to bend. The power
-  cable leaves through a notch in its bottom wall, then presses into the channel to the bottom edge.
-- **Stand:** the 103 mm leg slides into the angled socket. The frame then leans back 15°.
+  cable leaves through a notch in the end wall, then presses into the channel to the bottom edge.
+- **Stand (three angles):** the 93 mm leg slides into the angled socket and an **M3 x 30 screw**
+  goes in through the hole in the socket's back face, through one of the leg's three holes, and
+  bites in the plastic below. Leg hole nearest its top end: leans back 10°; middle: 15°; far: 20°
+  (pushed in deepest). The foot is rounded, so it sits flat at any of them.
 - **Printing:** the back prints panel-face down; the flange round the plug overhangs it, so
   it needs supports under the flange (tree supports, touching the bed only). On the H2C it fits in one piece.
   The cover prints face down with no supports (its angled edges are 45 degrees all the way to the wall). Use wood PLA

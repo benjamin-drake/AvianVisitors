@@ -80,8 +80,10 @@ def render(back_m, leg_m, L, out: Path, cover_m=None) -> None:
     plate = [world(oy0, B.PLUG_T), world(oy1, B.PLUG_T), world(oy1, B.PLUG_T + B.PLATE_T), world(oy0, B.PLUG_T + B.PLATE_T)]
     ax.fill(*zip(*plate), color="#7a5a3a", label="printed back")
     st, mo, d = S["start"], S["mouth"], S["d"]
-    foot = (mo[0] + d[0] * (length - B.LEG_SOCKET_DEPTH), mo[1] + d[1] * (length - B.LEG_SOCKET_DEPTH))
-    ax.plot(*zip(world(*st), world(*foot)), lw=6, color="#5b3d22", solid_capstyle="butt", label="leg")
+    ins = {lean: i for lean, i, _ in B.leg_settings()[1]}[B.LEAN]
+    top = (mo[0] - d[0] * ins, mo[1] - d[1] * ins)
+    foot = (mo[0] + d[0] * (length - ins), mo[1] + d[1] * (length - ins))
+    ax.plot(*zip(world(*top), world(*foot)), lw=6, color="#5b3d22", solid_capstyle="butt", label="leg")
     blk = [world(S["blk_y0"], B.PLUG_T + B.PLATE_T), world(S["blk_y1"], B.PLUG_T + B.PLATE_T),
            world(S["blk_y1"], B.PLUG_T + B.PLATE_T + S["blk_d"]), world(S["blk_y0"], B.PLUG_T + B.PLATE_T + S["blk_d"])]
     ax.fill(*zip(*blk), color="#7a5a3a")
